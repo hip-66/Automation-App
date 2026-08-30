@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PS Automation - Login</title>
+<style>
+    :root{
+        --bg:#080b12; --surface-2:#0e1420;
+        --text:#eef2f8; --dim:#93a1b8; --faint:#5a6883;
+        --accent:#F27A1D; --accent-2:#ff9f45; --cyan:#38bdf8;
+        --border:rgba(150,180,220,0.12);
+        --edge:rgba(120,170,230,0.14); --node-stroke:rgba(120,190,245,0.30);
+        --flow:#5ab0ff; --lead:#eaf4ff; --label:rgba(200,220,245,0.50); --node-fill:rgba(120,170,230,0.04);
+        --accent-primary:#F27A1D; --accent-primary-hover:#ff9f45; --border-focus:#F27A1D;
+        --accent-danger:#ff6b5e; --accent-danger-soft:rgba(255,107,94,0.16);
+        --font:-apple-system,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+        --mono:"SF Mono","Cascadia Code","JetBrains Mono",Consolas,ui-monospace,monospace;
+    }
+    [data-theme="light"]{
+        --bg:#eef2f8; --surface-2:#f6f8fb;
+        --text:#131a26; --dim:#4a5a72; --faint:#8b97ab;
+        --border:rgba(30,50,80,0.10);
+        --edge:rgba(40,90,160,0.15); --node-stroke:rgba(40,110,190,0.32);
+        --flow:#2f7fd6; --lead:#0b3d78; --label:rgba(30,50,80,0.55); --node-fill:rgba(40,90,160,0.04);
+        --accent-danger:#d84634; --accent-danger-soft:rgba(216,70,52,0.12);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    /* original background photo, baked diagram + title cleaned out so the LIVE
+       diagram doesn't double. NOT fixed-attachment (would flicker the glass). */
+    body{font-family:var(--font);color:var(--text);min-height:100vh;overflow-x:hidden;
+        background:#070b12 url("/images/login_clean_dark.jpg") center center/cover no-repeat;
+        transition:color .25s}
+    [data-theme="light"] body{background:#e7ecf3 url("/images/login_clean_light.jpg") center center/cover no-repeat}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+    /* live workflow diagram on the right */
+    .diagram{position:absolute;top:0;right:0;height:100%;width:38%;display:flex;align-items:center;justify-content:center;z-index:1;pointer-events:none}
+    @media(max-width:1120px){.diagram{display:none}}
+    #wf{width:100%;max-width:520px;height:92%;overflow:visible}
+    .wf-edge,.wf-track{fill:none;stroke:var(--edge);stroke-width:1.5}
+    .wf-glow{fill:none;stroke:var(--flow);stroke-width:6;stroke-linecap:round;stroke-dasharray:44 1000;opacity:.4;filter:blur(3px);animation:run 7s linear infinite}
+    .wf-lead{fill:none;stroke:var(--lead);stroke-width:2.2;stroke-linecap:round;stroke-dasharray:30 1000;animation:run 7s linear infinite}
+    @keyframes run{from{stroke-dashoffset:1030}to{stroke-dashoffset:30}}
+    .wf-node rect{fill:var(--node-fill);stroke:var(--node-stroke);stroke-width:1.3}
+    .wf-node .ic{fill:none;stroke:var(--cyan);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+    [data-theme="light"] .wf-node .ic{stroke:var(--flow)}
+    .wf-node .lbl{fill:var(--label);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+    @media(prefers-reduced-motion:reduce){.wf-glow,.wf-lead{animation:none!important;stroke-dashoffset:520}}
+
+    /* top-right controls */
+    .controls{position:fixed;top:20px;right:28px;display:flex;gap:8px;z-index:6}
+    .mini-btn{font-family:inherit;font-size:12.5px;font-weight:600;color:var(--dim);background:rgba(255,255,255,0.06);
+        border:1px solid var(--border);border-radius:8px;padding:7px 13px;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:.15s}
+    .mini-btn:hover{color:var(--text)}
+    [data-theme="light"] .mini-btn{background:rgba(255,255,255,0.6)}
+
+    /* centered column: branding lockup + login card */
+    .center{position:relative;z-index:3;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;padding:60px 20px}
+    .lockup{text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px}
+    .lockup .product{font-size:44px;font-weight:700;letter-spacing:-0.02em;line-height:1;direction:ltr;text-shadow:0 2px 18px rgba(0,0,0,.35)}
+    .lockup .product .g{background:linear-gradient(90deg,var(--cyan),var(--text));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+    .lockup .by{display:inline-flex;align-items:center;gap:9px;opacity:.9}
+    .lockup .by::before,.lockup .by::after{content:"";width:22px;height:1px;background:var(--border)}
+    .lockup .by img{height:22px;width:auto;display:block;filter:brightness(0) invert(1) drop-shadow(0 1px 3px rgba(0,0,0,.45))}
+    [data-theme="light"] .lockup .by img{filter:none;opacity:.85}
+
+    /* ===== the ONLY glass surface: the login box ===== */
+    .login-card{position:relative;width:100%;max-width:380px;border:1px solid rgba(255,255,255,0.24);border-radius:22px;padding:28px 28px;
+        background-color:transparent;
+        background-image:
+            linear-gradient(150deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.08) 26%, transparent 52%),
+            linear-gradient(135deg, rgba(255,255,255,0.14), rgba(255,255,255,0.055));
+        box-shadow:0 26px 64px -28px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 1px rgba(255,255,255,0.08);
+        backdrop-filter:blur(26px) saturate(180%); -webkit-backdrop-filter:blur(26px) saturate(180%)}
+    [data-theme="light"] .login-card{border-color:rgba(255,255,255,0.9);
+        background-image:
+            linear-gradient(150deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.35) 26%, transparent 55%),
+            linear-gradient(135deg, rgba(255,255,255,0.76), rgba(255,255,255,0.46));
+        box-shadow:0 22px 50px -24px rgba(30,50,80,.20), inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 1px rgba(255,255,255,0.5)}
+
+    .login-title{font-size:19px;font-weight:700;letter-spacing:-0.01em;color:var(--text);margin-bottom:3px;text-align:center}
+    .login-subtitle{font-size:13px;color:var(--dim);margin-bottom:22px;text-align:center}
+    .field{margin-bottom:15px;text-align:start}
+    .field label{display:block;font-size:12px;font-weight:600;color:var(--dim);margin-bottom:7px}
+    .field input{width:100%;padding:11px 13px;border-radius:12px;border:1px solid var(--border);
+        background:var(--surface-2);color:var(--text);font:inherit;font-size:14px;outline:none;transition:border-color .15s}
+    .field input:focus{border-color:var(--accent)}
+    .pass-wrap{position:relative}.pass-wrap input{padding-inline-end:42px}
+    .pass-eye{position:absolute;top:50%;inset-inline-end:10px;transform:translateY(-50%);background:none;border:none;color:var(--faint);cursor:pointer;padding:4px;line-height:0;display:flex;align-items:center}
+    .pass-eye:hover{color:var(--accent)}
+    .login-btn{width:100%;margin-top:6px;padding:12px;border:none;border-radius:40px;font:inherit;font-size:14px;font-weight:700;color:#fff;cursor:pointer;
+        background:linear-gradient(145deg,var(--accent-2),var(--accent));box-shadow:0 8px 22px rgba(242,122,29,.38),inset 0 1px 0 rgba(255,255,255,.42);transition:.15s}
+    .login-btn:hover{filter:brightness(1.05)}.login-btn:disabled{opacity:.6;cursor:not-allowed}
+    .login-err{display:none;background:var(--accent-danger-soft);color:var(--accent-danger);border-radius:10px;padding:9px 12px;font-size:12.5px;margin-bottom:14px;text-align:center}
+
+    .login-footer{position:absolute;bottom:16px;left:0;right:0;text-align:center;z-index:4}
+    .login-copyright{font-size:11.5px;color:var(--faint);line-height:1.5;max-width:520px;margin:0 auto;text-shadow:0 1px 4px rgba(0,0,0,0.4);
+        user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-touch-callout:none}
+    .login-version{font-size:11px;color:var(--faint);letter-spacing:0.3px;margin-top:4px;text-shadow:0 1px 4px rgba(0,0,0,0.4);
+        user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;-webkit-touch-callout:none}
+</style>
+</head>
+<body>
+    <div class="diagram"><svg id="wf" viewBox="0 0 560 880" role="img" aria-label="Automation workflow"></svg></div>
+
+    <div class="controls">
+        <button type="button" class="mini-btn" id="lang-toggle">EN</button>
+        <button type="button" class="mini-btn" id="theme-toggle"></button>
+    </div>
+
+    <div class="center">
+        <div class="lockup">
+            <div class="product"><span class="g">PS</span> Automation</div>
+            <div class="by"><img src="/images/Hiper_Global_logo.png" alt="HIPER Global"></div>
+        </div>
+        <div class="login-card">
+            <h2 class="login-title" id="t-title">כניסה למערכת</h2>
+            <p class="login-subtitle" id="t-subtitle">הזן שם משתמש וסיסמה כדי להיכנס</p>
+            <div class="login-err" id="login-error"></div>
+            <form id="login-form" autocomplete="on">
+                <div class="field">
+                    <label id="t-user" for="username">שם משתמש</label>
+                    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+                </div>
+                <div class="field">
+                    <label id="t-pass" for="password">סיסמה</label>
+                    <div class="pass-wrap">
+                        <input type="password" id="password" name="password" autocomplete="current-password" dir="ltr" style="text-align:start;" required>
+                        <button type="button" class="pass-eye" id="pass-eye" aria-label="Show password" title="">
+                            <svg id="eye-open" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg id="eye-closed" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" class="login-btn" id="submit-btn"><span id="t-submit">כניסה</span></button>
+            </form>
+        </div>
+    </div>
+
+    <div class="login-footer">
+        <div class="login-copyright" id="login-copyright"></div>
+        <div class="login-version" id="login-version"></div>
+    </div>
+
+<script>
+    /* ---------- localized copy + language / theme (persisted) ---------- */
+    const TXT = {
+        he: { title: "כניסה למערכת", subtitle: "הזן שם משתמש וסיסמה כדי להיכנס", user: "שם משתמש", pass: "סיסמה",
+              submit: "כניסה", submitting: "מתחבר...", badcreds: "שם משתמש או סיסמה שגויים",
+              locked: (s) => `יותר מדי ניסיונות כושלים. נסה שוב בעוד ${s} שניות`,
+              generic: "שגיאה בהתחברות, נסה שוב" },
+        en: { title: "Sign in", subtitle: "Enter your username and password to continue", user: "Username", pass: "Password",
+              submit: "Sign in", submitting: "Signing in...", badcreds: "Invalid username or password",
+              locked: (s) => `Too many failed attempts. Try again in ${s} seconds`,
+              generic: "Login failed, please try again" },
+    };
+    let lang = localStorage.getItem("app_lang") === "en" ? "en" : "he";
+    let copyrightData = null;
+
+    function updateCopyright() {
+        const el = document.getElementById("login-copyright");
+        if (!el || !copyrightData) return;
+        el.textContent = lang === "he" ? copyrightData.he : copyrightData.en;
+    }
+    fetch("/api/copyright").then(r => r.json()).then(d => {
+        if (d && d.he && d.en) { copyrightData = d; updateCopyright(); }
+    }).catch(() => {});
+    // copyright + version can be read but never selected / copied
+    ["login-copyright", "login-version"].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        ["selectstart", "copy", "cut", "contextmenu", "dragstart"].forEach(function (ev) {
+            el.addEventListener(ev, function (e) { e.preventDefault(); });
+        });
+    });
+
+    // running version (blank => that machine is on old code)
+    fetch("/api/ping").then(r => r.json()).then(d => {
+        if (d && d.version) document.getElementById("login-version").textContent = "v" + d.version;
+    }).catch(() => {});
+
+    // auto-close beacon (so closing Chrome on the login tab shuts the server)
+    window.addEventListener("pagehide", () => {
+        try { if (navigator.sendBeacon) navigator.sendBeacon("/api/shutdown-signal"); } catch (e) {}
+    });
+    // heartbeat backstop
+    setInterval(() => { fetch("/api/ping").catch(() => {}); }, 5000);
+
+    // password show / hide
+    (function () {
+        const passInput = document.getElementById("password");
+        const passEye = document.getElementById("pass-eye");
+        if (!passInput || !passEye) return;
+        passEye.addEventListener("click", () => {
+            const reveal = passInput.type === "password";
+            passInput.type = reveal ? "text" : "password";
+            document.getElementById("eye-open").style.display = reveal ? "none" : "block";
+            document.getElementById("eye-closed").style.display = reveal ? "block" : "none";
+        });
+    })();
+
+    function applyLang() {
+        const tr = TXT[lang];
+        document.documentElement.lang = lang;
+        document.documentElement.dir = lang === "he" ? "rtl" : "ltr";
+        document.getElementById("t-title").textContent = tr.title;
+        document.getElementById("t-subtitle").textContent = tr.subtitle;
+        document.getElementById("t-user").textContent = tr.user;
+        document.getElementById("t-pass").textContent = tr.pass;
+        document.getElementById("t-submit").textContent = tr.submit;
+        document.getElementById("lang-toggle").textContent = lang === "he" ? "EN" : "עב";
+        updateCopyright();
+    }
+    const THEME_KEY = "app_theme";
+    let theme = localStorage.getItem(THEME_KEY) || "dark";
+    function applyTheme() {
+        document.documentElement.setAttribute("data-theme", theme);
+        const isDark = theme === "dark";
+        document.getElementById("theme-toggle").textContent = isDark
+            ? (lang === "he" ? "🌙 כהה" : "🌙 Dark")
+            : (lang === "he" ? "☀️ בהיר" : "☀️ Light");
+    }
+    document.getElementById("lang-toggle").addEventListener("click", () => {
+        lang = lang === "he" ? "en" : "he"; localStorage.setItem("app_lang", lang); applyLang(); applyTheme();
+    });
+    document.getElementById("theme-toggle").addEventListener("click", () => {
+        theme = theme === "dark" ? "light" : "dark"; localStorage.setItem(THEME_KEY, theme); applyTheme();
+    });
+    applyLang(); applyTheme();
+
+    /* ---------- login submit ---------- */
+    const form = document.getElementById("login-form");
+    const errorBox = document.getElementById("login-error");
+    const submitBtn = document.getElementById("submit-btn");
+    const submitText = document.getElementById("t-submit");
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const tr = TXT[lang];
+        errorBox.style.display = "none"; submitBtn.disabled = true; submitText.textContent = tr.submitting;
+        fetch("/api/login", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: document.getElementById("username").value, password: document.getElementById("password").value }),
+        })
+            .then((res) => res.json().then((data) => ({ status: res.status, data })))
+            .then(({ status, data }) => {
+                if (status === 200 && data.ok) {
+                    try { sessionStorage.removeItem("psauto_env_cache_v1"); } catch (e) {}
+                    window.location.href = "/"; return;
+                }
+                if (status === 429 && typeof data.retry_after === "number") errorBox.textContent = tr.locked(data.retry_after);
+                else if (status === 401) errorBox.textContent = tr.badcreds;
+                else errorBox.textContent = tr.generic;
+                errorBox.style.display = "block"; submitBtn.disabled = false; submitText.textContent = tr.submit;
+            })
+            .catch(() => {
+                errorBox.textContent = tr.generic; errorBox.style.display = "block";
+                submitBtn.disabled = false; submitText.textContent = tr.submit;
+            });
+    });
+
+    /* ---------- live workflow diagram: static structure + ONE flowing light ---------- */
+    (function () {
+        const NS = "http://www.w3.org/2000/svg", svg = document.getElementById("wf");
+        if (!svg) return;
+        const NW = 88, NH = 62;
+        const N = {
+            trigger:{x:300,y:60,label:"TRIGGER",icon:"play"}, workflow:{x:120,y:190,label:"WORKFLOW",icon:"flow"},
+            script:{x:452,y:190,label:"SCRIPT",icon:"code"}, validation:{x:452,y:360,label:"VALIDATION",icon:"check"},
+            api:{x:150,y:430,label:"API",icon:"api"}, database:{x:452,y:520,label:"DATABASE",icon:"db"},
+            cloud:{x:330,y:660,label:"CLOUD",icon:"cloud"}, deploy:{x:300,y:810,label:"DEPLOYMENT",icon:"rocket"},
+        };
+        const BRANCH = [["trigger","workflow"],["workflow","api"],["api","database"],["validation","cloud"]];
+        const SPINE = ["trigger","script","validation","database","cloud","deploy"];
+        function elbow(a,b,lead){ const my=(a.y+b.y)/2; return (lead?"":"M "+a.x+" "+a.y+" ")+"V "+my+" H "+b.x+" V "+b.y; }
+        function spinePath(){ let d="M "+N[SPINE[0]].x+" "+N[SPINE[0]].y; for(let i=1;i<SPINE.length;i++){ d+=" "+elbow(N[SPINE[i-1]],N[SPINE[i]],true);} return d; }
+        function icon(t){switch(t){
+            case"play":return "<path class='ic' d='M9 7l9 5-9 5z'/>";
+            case"flow":return "<rect class='ic' x='9.5' y='3' width='5' height='4' rx='1'/><path class='ic' d='M12 7v4M6 20v-4a2 2 0 012-2h8a2 2 0 012 2v4'/>";
+            case"code":return "<path class='ic' d='M9 8l-4 4 4 4M15 8l4 4-4 4'/>";
+            case"check":return "<circle class='ic' cx='12' cy='12' r='7'/><path class='ic' d='M8.5 12l2.5 2.5 4.5-5'/>";
+            case"api":return "<path class='ic' d='M12 3l7 4v10l-7 4-7-4V7z'/><path class='ic' d='M9 12h.01M12 12h.01M15 12h.01'/>";
+            case"db":return "<ellipse class='ic' cx='12' cy='6' rx='6' ry='2.4'/><path class='ic' d='M6 6v12c0 1.3 2.7 2.4 6 2.4s6-1.1 6-2.4V6'/><path class='ic' d='M6 12c0 1.3 2.7 2.4 6 2.4s6-1.1 6-2.4'/>";
+            case"cloud":return "<path class='ic' d='M7 18a4 4 0 01-.5-7.97A5 5 0 0116 9.5a3.5 3.5 0 01.5 6.97z'/>";
+            case"rocket":return "<path class='ic' d='M12 3c3 1.5 4.5 4.5 4.5 8L12 16l-4.5-5C7.5 7.5 9 4.5 12 3z'/><circle class='ic' cx='12' cy='9' r='1.6'/><path class='ic' d='M9 16l-2 4M15 16l2 4'/>";
+            default:return "";}}
+        BRANCH.forEach(e=>{const p=document.createElementNS(NS,"path");p.setAttribute("d",elbow(N[e[0]],N[e[1]],false));p.setAttribute("class","wf-edge");svg.appendChild(p);});
+        const d=spinePath();
+        ["wf-track","wf-glow","wf-lead"].forEach(cls=>{const p=document.createElementNS(NS,"path");p.setAttribute("d",d);p.setAttribute("class",cls);p.setAttribute("pathLength","1000");svg.appendChild(p);});
+        Object.values(N).forEach(n=>{
+            const g=document.createElementNS(NS,"g");g.setAttribute("class","wf-node");
+            const x=n.x-NW/2,y=n.y-NH/2;
+            const r=document.createElementNS(NS,"rect");r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",NW);r.setAttribute("height",NH);r.setAttribute("rx",13);
+            const ig=document.createElementNS(NS,"g");ig.innerHTML=icon(n.icon);ig.setAttribute("transform","translate("+(n.x-12)+","+(n.y-18)+")");
+            const l=document.createElementNS(NS,"text");l.setAttribute("class","lbl");l.setAttribute("x",n.x);l.setAttribute("y",y+NH+16);l.setAttribute("text-anchor","middle");l.textContent=n.label;
+            g.appendChild(r);g.appendChild(ig);g.appendChild(l);svg.appendChild(g);
+        });
+    })();
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "atp": {
+    "label": "ATP",
+    "builtin": true,
+    "commands": "echo hostname\nhostname\necho ----------------------------------------------------\necho ifconfig -a\nifconfig -a\necho ----------------------------------------------------\necho ip a\nip a\necho ----------------------------------------------------\nyum repolist\necho ----------------------------------------------------\nlsblk --list\necho ----------------------------------------------------\ncat /etc/resolv.conf\necho ----------------------------------------------------\ncat /etc/chrony.conf\necho ----------------------------------------------------\nfor i in $(ls /etc/*release); do echo ===$i===; cat $i; done\necho ----------------------------------------------------\ndate\necho ----------------------------------------------------\necho End Of Validation"
+  },
+  "tbos": {
+    "label": "TBOS",
+    "builtin": true,
+    "commands": "hostname\necho \"=== TBOS Service Status ===\"\nsystemctl status tbos\necho \"=== Disk Usage ===\"\ndf -h\necho \"=== Network Interfaces ===\"\nip a\ndate\necho \"End Of Validation\""
+  },
+  "kafka": {
+    "label": "KAFKA",
+    "builtin": true,
+    "commands": "hostname\necho \"=== Kafka Service Status ===\"\nsystemctl status kafka\nsystemctl status zookeeper\necho \"=== Disk Usage ===\"\ndf -h\necho \"=== Java Version ===\"\njava -version\ndate\necho \"End Of Validation\""
+  },
+  "worker": {
+    "label": "WORKER",
+    "builtin": true,
+    "commands": "hostname\necho \"=== Docker Containers ===\"\ndocker ps -a\necho \"=== Resource Usage ===\"\nfree -m\ndf -h\ndate\necho \"End Of Validation\""
+  }
+}

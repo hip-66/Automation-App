@@ -1,0 +1,26 @@
+[
+  {
+    "id": "sc_b64a8ed1d7",
+    "script_id": "s_cognyte_python_idrac_report_py",
+    "script_name": "idrac_report",
+    "company": "cognyte",
+    "stage": null,
+    "risk": "read",
+    "payload": {
+      "script_id": "s_cognyte_python_idrac_report_py",
+      "mode": "2",
+      "base_ip": "",
+      "start_suffix": "207",
+      "count": "1",
+      "ips": "172.29.30.105",
+      "username": "root",
+      "chromedriver_path": "C:\\Elad\\PS- Elad\\Project\\PS App\\Automation App\\Chromedrivers\\ChromeDriver 150.0.7871.47\\chromedriver.exe"
+    },
+    "scheduled_at": "2026-07-13T09:49",
+    "status": "triggered",
+    "created_by": "Admin",
+    "created_at": "2026-07-13 09:46:48",
+    "run_id": "bd063716-0d08-4232-bafc-7616fc5ac0ee",
+    "error": null
+  }
+]

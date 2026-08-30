@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python -m py_compile server.py)",
+      "PowerShell(if \\($?\\) { \"PYTHON SYNTAX OK\" })",
+      "PowerShell(try { $n = \\(Get-Command node -ErrorAction Stop\\).Source; node --check \"static\\\\app.js\"; if \\($?\\) { \"JS SYNTAX OK\" } } catch { \"node not installed - skipping JS syntax check\" })",
+      "PowerShell(python -c \"import server; server.app.run\\(host='127.0.0.1', port=5001\\)\")",
+      "PowerShell($paths = \"C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\", \"C:\\\\Program Files \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\", \"$env:LOCALAPPDATA\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\"; foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { $p; break } })",
+      "PowerShell(Start-Sleep -Seconds 2; $r = Invoke-RestMethod -Uri \"http://127.0.0.1:5001/api/scripts\" -Method Get; \"COUNT: $\\($r.Count\\)\"; $r | ForEach-Object { \"$\\($_.id\\) | $\\($_.name\\)\" })",
+      "PowerShell($dom = & \"C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\" --headless --disable-gpu --virtual-time-budget=8000 --dump-dom \"http://127.0.0.1:5001/\" | Out-String; $count = \\([regex]::Matches\\($dom, 'class=\"script-item'\\)\\).Count; \"SCRIPT ITEMS RENDERED: $count\"; if \\($dom -match 'ATP Validation 2\\\\.0'\\) { \"ATP 2.0 BUTTON: FOUND\" })",
+      "PowerShell(python \"C:\\\\Users\\\\ELAD~1.DAF\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Elad-PS--Elad-Project-PS-App-Automation-App\\\\30e97039-9b14-46e0-b042-8482f22f7b14\\\\scratchpad\\\\e2e_test2.py\")",
+      "Read(//c/Users/elad.dafna/.claude/projects/c--Elad-PS--Elad-Project-PS-App-Automation-App/memory/**)",
+      "PowerShell(if \\($?\\) { \"SYNTAX OK\" })",
+      "PowerShell(Get-ChildItem \"Backup\\\\V2\" -Recurse | Where-Object { $_.Name -match \"Report Folder|history.json\" } | Select-Object FullName)",
+      "PowerShell(python \"C:\\\\Users\\\\ELAD~1.DAF\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Elad-PS--Elad-Project-PS-App-Automation-App\\\\30e97039-9b14-46e0-b042-8482f22f7b14\\\\scratchpad\\\\e2e_test3.py\")"
+    ]
+  }
+}

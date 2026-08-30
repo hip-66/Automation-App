@@ -1,0 +1,7 @@
+flask
+selenium
+python-docx
+Pillow
+pyvmomi
+python-dotenv
+cryptography
