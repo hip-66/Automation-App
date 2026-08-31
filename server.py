@@ -64,11 +64,7 @@ app.config.update(
 LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "120"))
 _login_attempts = {}  # client ip -> {"count": int, "locked_until": epoch-seconds}
-# /api/shutdown-signal is public so the LOGIN page can also send the
-# browser-closed beacon (it has no session yet). It only ever starts the same
-# short grace-period shutdown; the app binds to 127.0.0.1 only, so nothing
-# off-machine can reach it.
-_PUBLIC_PATHS = {"/login", "/login.html", "/api/login", "/favicon.ico", "/api/copyright", "/api/ping", "/api/shutdown-signal"}
+_PUBLIC_PATHS = {"/login", "/login.html", "/api/login", "/favicon.ico", "/api/copyright", "/api/ping"}
 
 
 def _client_ip():
@@ -113,11 +109,10 @@ def _require_login():
 # app's OWN page - verified by matching the Origin (or, if absent, the Referer)
 # host to the server's own host. A cross-site request carries the attacker's
 # origin and is rejected. This is on top of the SameSite=Lax cookie already
-# set above (defense in depth). /api/login and /api/shutdown-signal are exempt:
-# login has no session yet, and shutdown-signal is a public browser-close
-# beacon that only ever triggers the same graceful shutdown.
+# set above (defense in depth). /api/login is exempt since it has no session
+# yet to protect.
 _CSRF_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
-_CSRF_EXEMPT_PATHS = {"/api/login", "/api/shutdown-signal"}
+_CSRF_EXEMPT_PATHS = {"/api/login"}
 
 @app.before_request
 def _csrf_protect():
@@ -1941,74 +1936,6 @@ def api_translate():
         return jsonify({"translated": "", "error": "offline"})
 
 # ---------------------------------------------------------------------------
-# Auto-close: the server exits when the browser is really gone, decided by TWO
-# independent signals (either one suffices):
-#   1) Beacon: pages send /api/shutdown-signal from pagehide when a tab closes;
-#      after a short grace with no other request, we exit. Fast (~5-7s), but
-#      Chrome skips unload handlers for pages the user never interacted with
-#      (e.g. a login page left by the idle auto-logout), so it can miss.
-#   2) Heartbeat: every page (app + login) pings /api/ping every few seconds.
-#      If we've seen at least one request ever and then NOTHING arrives for
-#      TAB_GONE_SECONDS, no tab exists anymore -> exit. The threshold is high
-#      (90s) because Chrome throttles background-tab timers to once a minute.
-# A run in progress or a pending scheduled run always blocks shutdown.
-# A watcher-tick gap (laptop sleep / process freeze) resets the heartbeat
-# grace so waking the machine never kills a server whose tab is still open.
-# ---------------------------------------------------------------------------
-_pending_shutdown_since = None
-SHUTDOWN_GRACE_SECONDS = 5
-_last_tab_activity = None    # epoch of the last request from any page; None until first request
-TAB_GONE_SECONDS = 90
-
-@app.before_request
-def _cancel_pending_shutdown_on_activity():
-    global _pending_shutdown_since, _last_tab_activity
-    if request.path != "/api/shutdown-signal":
-        _last_tab_activity = time.time()
-        if _pending_shutdown_since is not None:
-            _pending_shutdown_since = None
-
-@app.route('/api/shutdown-signal', methods=['POST'])
-def api_shutdown_signal():
-    global _pending_shutdown_since
-    _pending_shutdown_since = time.time()
-    return ("", 204)
-
-def _shutdown_watcher():
-    global _pending_shutdown_since, _last_tab_activity
-    last_tick = time.time()
-    while True:
-        time.sleep(2)
-        now = time.time()
-        slept = (now - last_tick) > 30  # machine was asleep / process frozen
-        last_tick = now
-        if slept:
-            # Fresh grace after wake: give still-open tabs time to ping again
-            # before concluding they're gone.
-            if _last_tab_activity is not None:
-                _last_tab_activity = now
-            _pending_shutdown_since = None
-            continue
-
-        beacon_fired = (_pending_shutdown_since is not None
-                        and now - _pending_shutdown_since >= SHUTDOWN_GRACE_SECONDS)
-        tabs_gone = (_last_tab_activity is not None
-                     and now - _last_tab_activity > TAB_GONE_SECONDS)
-        if not (beacon_fired or tabs_gone):
-            continue
-        if any(r.get("status") == "running" for r in active_runs.values()):
-            continue  # never kill the server while an automation is still running
-        if any(s.get("status") == "pending" for s in load_schedules()):
-            continue  # a scheduled run is still waiting to fire - keep serving unattended
-        reason = "browser window closed" if beacon_fired else "no browser tab activity"
-        server_logger.info(f"Shutting down PS Automation server ({reason}).")
-        os._exit(0)
-
-# Started unconditionally at import time (not gated behind __main__) so the
-# auto-close behavior works no matter how the Flask app is launched.
-threading.Thread(target=_shutdown_watcher, daemon=True).start()
-
-# ---------------------------------------------------------------------------
 # API: history
 # ---------------------------------------------------------------------------
 def _reconcile_history_with_disk():
@@ -2223,7 +2150,7 @@ def api_delete_schedule(schedule_id):
 def _scheduler_watcher():
     """Background thread: fires any schedule whose time has arrived through
     the same _launch_run() path /api/run uses. Runs unconditionally at import
-    time (like _shutdown_watcher), independent of any browser tab being open."""
+    time, independent of any browser tab being open."""
     while True:
         time.sleep(20)
         try:
@@ -3496,71 +3423,44 @@ def delete_history_entries():
         save_history(remaining)
     return jsonify({"status": "deleted", "count": deleted_count, "history": remaining})
 
-def _find_free_port(preferred=5000, max_tries=20):
-    """Use the preferred port if it's free; only if it's actually busy (e.g.
-    another PS Automation instance is already running) does it move on to
-    the next ones."""
-    import socket
-    port = preferred
-    for _ in range(max_tries):
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            s.bind(("127.0.0.1", port))
-            s.close()
-            return port
-        except OSError:
-            s.close()
-            port += 1
-    return preferred  # give up - fall back to the original (Flask will raise a clear error)
-
-def _find_running_instance(scan_ports=range(5000, 5020)):
-    """Return the port of an already-running PS Automation instance, or None.
-    Probes the /api/ping identity endpoint so we only match OUR app, never some
-    unrelated service that happens to hold the port.
-
-    All ports are probed IN PARALLEL: on machines where connecting to a closed
-    localhost port hangs until the timeout instead of refusing instantly
-    (VPN/firewall loopback filtering), a sequential scan of 20 ports costs
-    20 x timeout (~20s of startup!) - in parallel the whole scan costs one
-    timeout (~1s)."""
+def _is_own_instance_running(host, port):
+    """True if PS Automation is already listening on host:port. Probes the
+    /api/ping identity endpoint so we only match OUR app, never some
+    unrelated service that happens to hold the port."""
     import urllib.request
-
-    def _probe(port):
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/ping", timeout=1.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                if data.get("app") == "ps-automation":
-                    return port
-        except Exception:
-            pass
-        return None
-
-    ports = list(scan_ports)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(ports)) as ex:
-        results = list(ex.map(_probe, ports))
-    for port in results:  # preserve lowest-port-first preference
-        if port is not None:
-            return port
-    return None
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/api/ping", timeout=1.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data.get("app") == "ps-automation"
+    except Exception:
+        return False
 
 if __name__ == '__main__':
     import webbrowser
 
-    # Single-instance: if PS Automation is already running, don't start a second
-    # server on another port (which caused stale-port confusion). Just open a
-    # browser tab to the existing instance and exit.
-    existing_port = _find_running_instance()
-    if existing_port is not None:
-        server_logger.info(f"PS Automation is already running on port {existing_port} - opening that window instead of starting a second server.")
+    # Local by default - each machine runs its own clone (see bootstrap.ps1),
+    # so Selenium/ChromeDriver/every automation subprocess executes on
+    # whichever machine actually launched it, using that machine's own
+    # network. Override PS_AUTOMATION_HOST in .env only for a machine that's
+    # deliberately meant to be reachable from other machines on the LAN.
+    RUN_HOST = os.environ.get("PS_AUTOMATION_HOST", "127.0.0.1")
+    RUN_PORT = int(os.environ.get("PS_AUTOMATION_PORT", "4444"))
+    # 0.0.0.0 is bind-only (can't be connected TO); binding to it already
+    # covers loopback, so self-checks below fall back to 127.0.0.1 in that
+    # case. Otherwise they talk to RUN_HOST directly (also reachable from
+    # this same machine, not just remotely).
+    PROBE_HOST = "127.0.0.1" if RUN_HOST == "0.0.0.0" else RUN_HOST
+
+    # Single-instance: if PS Automation is already running on this port, don't
+    # start a second server. Just open a browser tab to the existing instance
+    # and exit.
+    if _is_own_instance_running(PROBE_HOST, RUN_PORT):
+        server_logger.info(f"PS Automation is already running on port {RUN_PORT} - opening that window instead of starting a second server.")
         try:
-            webbrowser.open(f"http://127.0.0.1:{existing_port}")
+            webbrowser.open(f"http://{PROBE_HOST}:{RUN_PORT}")
         except Exception:
             pass
         sys.exit(0)
-
-    RUN_PORT = _find_free_port(5000)
-    if RUN_PORT != 5000:
-        server_logger.warning(f"Port 5000 was busy - using port {RUN_PORT} instead.")
 
     # Seed the persistent screenshot counter ONCE, before any run can finish,
     # so the all-time baseline is established from existing .docx and a run's
@@ -3578,13 +3478,24 @@ if __name__ == '__main__':
         deadline = time.time() + 10
         while time.time() < deadline:
             try:
-                with socket.create_connection(("127.0.0.1", RUN_PORT), timeout=0.3):
+                with socket.create_connection((PROBE_HOST, RUN_PORT), timeout=0.3):
                     break
             except OSError:
                 time.sleep(0.1)
-        webbrowser.open(f"http://127.0.0.1:{RUN_PORT}")
+        webbrowser.open(f"http://{PROBE_HOST}:{RUN_PORT}")
 
     threading.Thread(target=open_browser, daemon=True).start()
 
-    server_logger.info(f"Starting PS Automation v{APP_VERSION} on http://127.0.0.1:{RUN_PORT}")
-    app.run(host='127.0.0.1', port=RUN_PORT, debug=False)
+    server_logger.info(f"Starting PS Automation v{APP_VERSION} on http://{RUN_HOST}:{RUN_PORT}")
+    try:
+        # threaded=True: without it, Werkzeug's dev server handles ONE HTTP
+        # connection at a time - and /api/stream/<run_id> (the live console)
+        # holds its connection open in a polling loop for the run's entire
+        # duration, so a single long-running automation would otherwise
+        # freeze the whole app for any other tab/request. Shared mutable
+        # state (history/schedules/counters) is already lock-protected (see
+        # _history_lock etc.), so serving requests on separate threads is safe.
+        app.run(host=RUN_HOST, port=RUN_PORT, debug=False, threaded=True)
+    except OSError as e:
+        server_logger.error(f"Could not bind to {RUN_HOST}:{RUN_PORT} - {e}. Is port {RUN_PORT} already in use by another program?")
+        sys.exit(1)

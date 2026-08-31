@@ -185,13 +185,6 @@
         if (d && d.version) document.getElementById("login-version").textContent = "v" + d.version;
     }).catch(() => {});
 
-    // auto-close beacon (so closing Chrome on the login tab shuts the server)
-    window.addEventListener("pagehide", () => {
-        try { if (navigator.sendBeacon) navigator.sendBeacon("/api/shutdown-signal"); } catch (e) {}
-    });
-    // heartbeat backstop
-    setInterval(() => { fetch("/api/ping").catch(() => {}); }, 5000);
-
     // password show / hide
     (function () {
         const passInput = document.getElementById("password");

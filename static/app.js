@@ -4786,28 +4786,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // =====================================================================
-    // Auto-close: signal the server when this tab/window is actually closed
-    // (not just refreshed) so the background process doesn't linger. Uses
-    // pagehide (fires reliably on close/refresh/navigate) + sendBeacon for
-    // delivery even during unload. The server waits a short grace period
-    // and cancels the shutdown if any new request arrives (i.e. a refresh).
-    // =====================================================================
-    window.addEventListener("pagehide", () => {
-        try {
-            if (navigator.sendBeacon) {
-                navigator.sendBeacon("/api/shutdown-signal");
-            }
-        } catch (e) { /* best-effort only */ }
-    });
-
-    // Heartbeat: a tiny ping every few seconds proves this tab is still open.
-    // The server exits once heartbeats stop for a while - a robust backstop
-    // for the beacon above, which Chrome skips on pages that were never
-    // interacted with. (In a background tab Chrome throttles this to ~1/min;
-    // the server-side threshold accounts for that.)
-    setInterval(() => { fetch("/api/ping").catch(() => {}); }, 5000);
-
-    // =====================================================================
     // Initialize application
     // =====================================================================
     loadCommandProfiles().then(() => {
