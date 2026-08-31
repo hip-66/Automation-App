@@ -34,8 +34,10 @@ echo ok> "%~dp0.deps_ok"
 :start_server
 echo Launching server.py...
 python server.py
-:: No trailing "pause" here on purpose: the server shuts itself down when the
-:: browser window is closed (see the auto-close feature), and this window is
-:: usually hidden (launched via "Start PS Automation.vbs") - a pause would
-:: leave it sitting invisibly forever instead of actually closing.
+:: The server runs persistently (no auto-close on browser-tab-close) until
+:: this window/process is stopped directly. No trailing "pause" here on
+:: purpose: this window is usually hidden (launched via "Start PS
+:: Automation.vbs") - a pause would leave it sitting invisibly forever
+:: instead of actually closing once server.py does exit (e.g. Ctrl+C, or a
+:: startup error like a busy port).
 exit /b %errorlevel%
