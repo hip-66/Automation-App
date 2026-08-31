@@ -1,2 +1,0 @@
-1. You need to have Putty installed on your server/workstation.
-2. Enter valid administrator username & password for the remote servers
