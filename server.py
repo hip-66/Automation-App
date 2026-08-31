@@ -20,7 +20,7 @@ from flask import Flask, jsonify, request, Response, send_from_directory, sessio
 
 import security
 
-APP_VERSION = "2.3.61"
+APP_VERSION = "3.0.0"
 
 # Initialize Flask App
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -224,9 +224,9 @@ _time_saved_lock = threading.Lock()
 # included per the approved table - it only adds when a run reports successes.
 TIME_SAVED_PER_SERVER_MIN = {
     # Reports (screenshot validations)
-    "idrac_report.py": 6, "idrac_report.ps1": 6,
-    "dcui_report.py": 3, "dcui_report.ps1": 3,
-    "vmare_esxi_host_client_report.py": 9, "vmare_report.ps1": 9,
+    "idrac_report.py": 6,
+    "dcui_report.py": 3,
+    "vmare_esxi_host_client_report.py": 9,
     "windows_report.ps1": 5,
     "get_idrac_hostname.py": 1.5,
     "pingcheck.ps1": 0.5,
@@ -616,37 +616,21 @@ KNOWN_SCRIPT_DISPLAY = {
         "description": "דוח צילומי מסך של ממשק ה-DCUI דרך ה-iDRAC (שילוב RACADM מקומי)",
         "description_en": "DCUI interface screenshots report via iDRAC (with local RACADM)"
     },
-    "dcui_report.ps1": {
-        "description": "נקודת כניסה ב-PowerShell לדוח ה-DCUI (מפעילה את מנוע ה-Python הקיים)",
-        "description_en": "PowerShell entry point for the DCUI report (delegates to the existing Python engine)"
-    },
     "idrac_report.py": {
         "description": "דוח מערכת מפורט של ה-iDRAC עם צילומי מסך מהממשק",
         "description_en": "Detailed iDRAC system report with interface screenshots"
-    },
-    "idrac_report.ps1": {
-        "description": "נקודת כניסה ב-PowerShell לדוח מערכת ה-iDRAC (מפעילה את מנוע ה-Python הקיים)",
-        "description_en": "PowerShell entry point for the iDRAC system report (delegates to the existing Python engine)"
-    },
-    "vmare_report.py": {
-        "description": "דוח צילומי מסך של ממשק ה-ESXi Host Client (גרסה 1)",
-        "description_en": "ESXi Host Client interface screenshots report (version 1)"
-    },
-    "vmare_report.ps1": {
-        "description": "נקודת כניסה ב-PowerShell לדוח ה-ESXi (מפעילה את מנוע ה-Python הקיים)",
-        "description_en": "PowerShell entry point for the ESXi report (delegates to the existing Python engine)"
     },
     "vmare_esxi_host_client_report.py": {
         "description": "גרסה חלופית של דוח ממשק ESXi Host Client",
         "description_en": "Alternate version of the ESXi Host Client report"
     },
-    "vmare_esxi_host_client_report.ps1": {
-        "description": "נקודת כניסה ב-PowerShell לדוח ה-ESXi החלופי (מפעילה את מנוע ה-Python הקיים)",
-        "description_en": "PowerShell entry point for the alternate ESXi report (delegates to the existing Python engine)"
-    },
     "mdevalidation2.0.ps1": {
         "description": "ולידציית ATP מתקדמת: סטטוס לכל שרת, שליפת Hostname, לוג נפרד עם תאריך ושעה לכל שרת",
         "description_en": "Advanced ATP validation: per-server status, hostname detection, timestamped log per server"
+    },
+    "mdevalidation.ps1": {
+        "description": "ולידציית MDE/ATP בסיסית דרך SSH (הגרסה שלפני 2.0) - מריץ את אותן פקודות בדיקה על כל כתובת ברשימה, עם לוג נפרד לכל שרת",
+        "description_en": "Basic MDE/ATP validation over SSH (the version prior to 2.0) - runs the same set of check commands against every address in the list, with a separate log per server"
     },
     "windows_report.ps1": {
         "description": "צילומי מסך מקומיים של Server Manager, חיבורי רשת, ניהול דיסקים והפעלת Windows, בתוך מסמך Word",
@@ -659,6 +643,10 @@ KNOWN_SCRIPT_DISPLAY = {
     "configure_raid1.ps1": {
         "description": "מגדיר RAID1 + UEFI על שרתי iDRAC9: המרת דיסקים ל-RAID, יצירת vDisk1, ואתחול ל-UEFI. מריץ כל שרת בסשן נפרד (במקביל), עם דוח CSV מאוחד",
         "description_en": "Configures RAID1 + UEFI on iDRAC9 servers: converts disks to RAID, creates vDisk1, sets UEFI boot mode. Runs each server in its own parallel session, with a merged CSV report"
+    },
+    "non_raid.ps1": {
+        "description": "המרת דיסקים פיזיים במצב Ready ל-Non-RAID דרך Dell RACADM - לא נוגע בדיסקים במצב Online",
+        "description_en": "Converts physical disks in Ready state to Non-RAID via Dell RACADM - does not touch disks in Online state"
     },
     "power-down-servers.ps1": {
         "description": "כיבוי שרתים לפי כתובת iDRAC (racadm serveraction powerdown) - לפי טווח (התחלה + כמות) או רשימת כתובות",
@@ -893,7 +881,7 @@ def parse_script_location(rel_path, companies):
 
     return "general", None, False
 
-_RISK_DESTRUCTIVE_KEYWORDS = ("power-down", "power_down", "powerdown", "non_raid", "raid-uefi", "raid_uefi", "configure_raid", "raid1")
+_RISK_DESTRUCTIVE_KEYWORDS = ("power-down", "power_down", "powerdown", "power-on", "power_on", "powerup", "power-up", "non_raid", "raid-uefi", "raid_uefi", "configure_raid", "raid1")
 _RISK_CONFIG_KEYWORDS = ("esxi_host_config", "set_idrac_hostname", "set-idrac-hostname", "dns-ntp", "dns_ntp", "ntp+dns", "change_ip", "change-ip")
 
 def classify_script_risk(basename_lower):
@@ -930,6 +918,9 @@ _CATEGORY_BY_BASENAME = {
     # Changing an iDRAC's IP is an iDRAC configuration task (grouped with the
     # other set-* tools), not a generic "network" report.
     "change_ip.py":           "configuration",
+    # Read-only hostname check (makes no changes) - would otherwise auto-match
+    # the "configuration" keyword rule via "hostname" in the filename.
+    "get_idrac_hostname.py":  "report",
 }
 
 def classify_script_category(basename_lower):
@@ -2252,7 +2243,13 @@ def _scheduler_watcher():
                 # Rebuild the runnable payload in memory only: the password is
                 # stored encrypted (password_enc) in scheduled_runs.json and
                 # decrypted here, right before launch - never written back.
+                # script_id is stored as its own top-level field on the
+                # schedule entry (not inside payload), but _launch_run expects
+                # the SAME flat shape /api/run sends - so it must be merged
+                # back in here, or every scheduled run fails immediately with
+                # "Script 'None' was not found".
                 fire_payload = dict(entry.get("payload") or {})
+                fire_payload["script_id"] = entry.get("script_id")
                 if fire_payload.get("password_enc"):
                     decrypted = security.decrypt_value(fire_payload.pop("password_enc"))
                     if decrypted:

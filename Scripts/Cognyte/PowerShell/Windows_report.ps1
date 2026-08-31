@@ -731,5 +731,7 @@ Log "=== DONE. DOCX: $OutputDocx ==="
 [Win32]::ShowWindow($consoleHwnd, 9) | Out-Null    # SW_RESTORE
 [Win32]::SetForegroundWindow($consoleHwnd) | Out-Null
 
-Write-Host "`nPress Enter to exit..." -ForegroundColor Yellow
-Read-Host
+if (-not [Console]::IsInputRedirected) {
+    Write-Host "`nPress Enter to exit..." -ForegroundColor Yellow
+    Read-Host
+}

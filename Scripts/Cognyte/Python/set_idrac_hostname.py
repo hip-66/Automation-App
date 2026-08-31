@@ -24,11 +24,17 @@ import subprocess
 IDRAC_USER = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip()
 IDRAC_PASS = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "")
 if not IDRAC_USER or not IDRAC_PASS:
-    import getpass
-    if not IDRAC_USER:
-        IDRAC_USER = input("iDRAC username: ").strip()
-    if not IDRAC_PASS:
-        IDRAC_PASS = getpass.getpass("iDRAC password: ")
+    if sys.stdin is not None and sys.stdin.isatty():
+        import getpass
+        if not IDRAC_USER:
+            IDRAC_USER = input("iDRAC username: ").strip()
+        if not IDRAC_PASS:
+            IDRAC_PASS = getpass.getpass("iDRAC password: ")
+    else:
+        print("ERROR: No iDRAC credentials available (defaults not configured) and this run "
+              "is non-interactive, so a prompt cannot be shown. Configure the app's default "
+              "iDRAC credentials and retry.", flush=True)
+        sys.exit(1)
 
 
 def resolve_racadm():

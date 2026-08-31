@@ -82,11 +82,17 @@ from tkinter import ttk, messagebox
 ESXI_USER = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip()
 ESXI_PASS = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "")
 if not ESXI_USER or not ESXI_PASS:
-    import getpass
-    if not ESXI_USER:
-        ESXI_USER = input("ESXi username: ").strip()
-    if not ESXI_PASS:
-        ESXI_PASS = getpass.getpass("ESXi password: ")
+    if sys.stdin is not None and sys.stdin.isatty():
+        import getpass
+        if not ESXI_USER:
+            ESXI_USER = input("ESXi username: ").strip()
+        if not ESXI_PASS:
+            ESXI_PASS = getpass.getpass("ESXi password: ")
+    else:
+        print("ERROR: No ESXi username/password available (defaults not configured) and this "
+              "run is non-interactive, so a prompt cannot be shown. Configure the app's default "
+              "ESXi credentials and retry.", flush=True)
+        sys.exit(1)
 
 # ESXi Host Client startup-policy labels <-> pyVmomi service policy values.
 NTP_POLICY_LABELS = {

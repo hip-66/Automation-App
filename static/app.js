@@ -124,6 +124,28 @@ document.addEventListener("DOMContentLoaded", () => {
     updateLogoutButton();
 
     // ---------------------------------------------------------------------
+    // Global session-expiry guard: the server can invalidate every open
+    // session without any client-side idle timeout ever firing (e.g. the app
+    // process restarts, which deliberately regenerates the session-signing
+    // key on every launch - see server.py). Without this, every API call
+    // made afterwards just gets a 401 that nothing looks at, so the app
+    // keeps looking normal while nothing actually works until a manual
+    // refresh. Catch it the moment ANY fetch() reveals the session is dead.
+    // ---------------------------------------------------------------------
+    let sessionExpiredHandled = false;
+    const _origFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+        return _origFetch(input, init).then((response) => {
+            const url = typeof input === "string" ? input : (input && input.url) || "";
+            if (response.status === 401 && !url.includes("/api/login") && !sessionExpiredHandled) {
+                sessionExpiredHandled = true;
+                performLogout();
+            }
+            return response;
+        });
+    };
+
+    // ---------------------------------------------------------------------
     // Idle auto-logout: 15 minutes with no real mouse/keyboard/touch
     // activity sends you back to the login page, so an unattended session
     // can't be used by anyone who isn't logged in themselves. Background
