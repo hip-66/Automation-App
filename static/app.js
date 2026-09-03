@@ -43,7 +43,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // only that server's session lines. Driven by clicking a server chip.
     let activeServerFilter = null;
     let currentPage = (location.hash || "").replace("#", "") || "dashboard";
-    if (!["dashboard", "wizard", "targets", "scheduling", "reports", "logs"].includes(currentPage)) currentPage = "dashboard";
+    // Kept in sync with ALL_PAGES below (declared later, so it cannot be
+    // referenced here) - omitting "fleet"/"guides" silently sent a refresh on
+    // either of those pages to the Dashboard instead of back where you were.
+    if (!["dashboard", "wizard", "targets", "scheduling", "reports", "logs", "fleet", "guides"].includes(currentPage)) currentPage = "dashboard";
     let currentCommandProfile = prefs.last_profile || "atp";
     let environmentInfo = {};
     const ENV_CACHE_KEY = "psauto_env_cache_v1";
@@ -62,6 +65,13 @@ document.addEventListener("DOMContentLoaded", () => {
     let checkedLogRunIds = new Set();
     let targetGroupsData = [];
     let WIZ = { step: 1, finished: true, pendingTargetGroupId: null };
+    // How many wizard-STEP history entries we have pushed on top of the current
+    // "#wizard" page entry (see wizGoStep/wizGoBack). Mirrors the wizDepth of
+    // whichever history entry we are sitting on, and is re-synced from
+    // event.state on popstate - so it stays correct even after the user walks
+    // the physical Back/Forward buttons around. 0 means "the catalog entry
+    // itself", i.e. there is no wizard step left to pop.
+    let wizHistoryDepth = 0;
     // Consumed once by enterWizardPage() to mark the next fresh Wizard entry
     // as "configuring a schedule" (set by the Scheduling page's "+ New" button).
     let wizSchedulingIntent = false;
@@ -1688,6 +1698,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // themselves (popstate below) - the browser already moved the
         // history position in that case, so pushing again would duplicate it.
         if (!opts.fromPopState) {
+            // A fresh entry into the Wizard page starts a new step-history run:
+            // the entry we are about to push IS the catalog (depth 0), and
+            // enterWizardPage() annotates it with the step actually shown via
+            // wizSyncHistory() right after this.
+            if (page === "wizard") wizHistoryDepth = 0;
             try { history.pushState({ page: page }, "", "#" + page); } catch (e) { /* ignore */ }
         }
 
@@ -1704,8 +1719,25 @@ document.addEventListener("DOMContentLoaded", () => {
     // Back/Forward buttons (which change the URL hash without our own code
     // running) - reads whatever hash the browser just navigated to and
     // renders that page, without pushing yet another history entry.
-    window.addEventListener("popstate", () => {
+    window.addEventListener("popstate", (e) => {
+        const st = e.state || {};
         const hash = (location.hash || "").replace(/^#/, "");
+        // Wizard steps are real history entries of their own (wizGoStep), and
+        // they all share the "#wizard" hash - so the hash alone cannot tell us
+        // WHICH step to restore. Read it off the entry's state instead,
+        // otherwise Back inside the wizard would dump the user back on the
+        // catalog (or, before steps were history entries at all, straight out
+        // to the Dashboard - which is exactly the bug this fixes).
+        if ((st.page || hash) === "wizard") {
+            wizHistoryDepth = st.wizDepth || 0;
+            if (st.wizStep) {
+                WIZ.step = st.wizStep;
+                // Without this, enterWizardPage() sees the "finished" flag and
+                // resets the whole wizard to step 1, throwing away the step we
+                // were just asked to restore.
+                WIZ.finished = false;
+            }
+        }
         switchPage(hash || "dashboard", { fromPopState: true });
     });
 
@@ -2948,12 +2980,58 @@ document.addEventListener("DOMContentLoaded", () => {
         if (view !== "live") { WIZ.step = view; renderWizardSteps(); }
     }
 
+    // Records the step the user is CURRENTLY looking at onto the current history
+    // entry WITHOUT adding a new one, so a later Back/Forward can restore this
+    // exact view. Used when the wizard settles on a step by means other than a
+    // step navigation (entering the page, restoring after Back, a fallback).
+    function wizSyncHistory() {
+        if (currentPage !== "wizard") return;
+        try {
+            history.replaceState({ page: "wizard", wizStep: WIZ.step, wizDepth: wizHistoryDepth }, "", "#wizard");
+        } catch (e) { /* ignore */ }
+    }
+
+    // Forward navigation between wizard steps. Each step becomes its own browser
+    // history entry, so the physical Back button walks 4 -> 3 -> 2 -> 1 through
+    // the wizard and only leaves the page once it runs out of steps - instead of
+    // treating the entire wizard as one entry and jumping straight to whatever
+    // page came before it. The URL stays "#wizard" for every step (the step
+    // lives in the entry's state): a step is meaningless to deep-link into,
+    // since steps 2-4 render from an in-memory selectedScript that a cold load
+    // does not have.
+    function wizGoStep(view) {
+        if (String(WIZ.step) === String(view)) { wizShowStep(view); return; }   // no duplicate entry
+        wizShowStep(view);
+        wizHistoryDepth += 1;
+        try {
+            history.pushState({ page: "wizard", wizStep: view, wizDepth: wizHistoryDepth }, "", "#wizard");
+        } catch (e) { /* ignore */ }
+    }
+
+    // The in-app "Back" buttons must do exactly what the browser's Back button
+    // does, or the two drift apart - pressing browser-Back right after an in-app
+    // Back would walk FORWARD again through the entry the in-app button left
+    // behind. So when this step is a real history entry, just pop it and let the
+    // popstate handler above re-render. Only when there is nothing to pop (the
+    // wizard was entered straight onto a later step) do we move by hand.
+    function wizGoBack(fallbackStep) {
+        if (wizHistoryDepth > 0) { history.back(); return; }
+        WIZ.step = fallbackStep;
+        enterWizardPage();   // re-renders the step and re-syncs the history entry
+    }
+
     function enterWizardPage() {
         if (activeRunId) { wizShowStep("live"); return; }
         if (WIZ.finished) {
             WIZ = { step: 1, finished: false, pendingTargetGroupId: WIZ.pendingTargetGroupId, schedulingMode: wizSchedulingIntent };
             wizSchedulingIntent = false;
         }
+        // Steps 2-4 all render from selectedScript; without one, renderForm(null)
+        // throws on script.inputs. That happens for a restored history entry
+        // whose selection has since been cleared (e.g. the catalog filter moved
+        // and renderWizardAutoList dropped it), so fall back to the catalog
+        // rather than rendering a broken step.
+        if (WIZ.step !== 1 && WIZ.step !== "live" && !selectedScript) WIZ.step = 1;
         wizShowStep(WIZ.step === "live" ? 1 : WIZ.step);
         if (WIZ.step === 1 || !WIZ.step) {
             renderCategorySidebar();
@@ -2971,14 +3049,18 @@ document.addEventListener("DOMContentLoaded", () => {
                     .catch(() => {});
             }
         }
-        if (WIZ.step === 2) wizRenderStep2();
+        // lastPayload as the prefill so coming BACK to the targets form (via the
+        // Back button or the browser's) restores what the user had typed,
+        // instead of resetting every field to its default.
+        if (WIZ.step === 2) wizRenderStep2(WIZ.lastPayload);
         if (WIZ.step === 3) wizRenderStep3();
         if (WIZ.step === 4) wizRenderStep4();
+        wizSyncHistory();
     }
 
     document.getElementById("wiz-step1-next").addEventListener("click", () => {
         if (!selectedScript) return;
-        wizShowStep(2);
+        wizGoStep(2);
         wizRenderStep2();
     });
 
@@ -3034,8 +3116,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.getElementById("wiz-step2-back").addEventListener("click", () => {
-        wizShowStep(1);
-        renderWizardAutoList(filteredScriptsForSearch());
+        wizGoBack(1);
     });
 
     document.getElementById("wiz-step2-next").addEventListener("click", () => {
@@ -3050,7 +3131,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (raidEl) savePref("last_raid_name", raidEl.value.trim());
         }
-        wizShowStep(3);
+        wizGoStep(3);
         wizRenderStep3();
     });
 
@@ -3139,12 +3220,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     document.getElementById("wiz-step3-back").addEventListener("click", () => {
-        wizShowStep(2);
-        wizRenderStep2(WIZ.lastPayload);
+        wizGoBack(2);
     });
 
     document.getElementById("wiz-step3-next").addEventListener("click", () => {
-        wizShowStep(4);
+        wizGoStep(4);
         wizRenderStep4();
     });
 
@@ -3250,8 +3330,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.getElementById("wiz-step4-back").addEventListener("click", () => {
-        wizShowStep(3);
-        wizRenderStep3();
+        wizGoBack(3);
     });
 
     document.getElementById("wiz-final-run-btn").addEventListener("click", () => {
@@ -4100,7 +4179,7 @@ document.addEventListener("DOMContentLoaded", () => {
             savePref("last_script", script.id);
             prefs = loadPrefs();
             WIZ.finished = false;
-            wizShowStep(2);
+            wizGoStep(2);   // its own history entry, so Back returns to the catalog
             wizRenderStep2(run.params);
             showToast(tr.toast_run_again_loaded, "success");
         };
@@ -5364,7 +5443,13 @@ document.addEventListener("DOMContentLoaded", () => {
             .catch(err => { runBtn.disabled = false; resultsEl.textContent = ""; showError(t().error_connection, err); });
     }
 
-    document.getElementById("fleet-back-btn").addEventListener("click", () => switchPage("wizard"));
+    document.getElementById("fleet-back-btn").addEventListener("click", () => {
+        // Pop the Fleet entry instead of pushing a SECOND "#wizard" entry on top
+        // of it - otherwise the Fleet page stays sitting FORWARD of us in the
+        // history and the physical Back button walks right back into it.
+        if ((history.state || {}).page === "fleet") history.back();
+        else switchPage("wizard");
+    });
 
     document.getElementById("fleet-connect-btn").addEventListener("click", () => {
         const targets = fleetMachines.filter(m => fleetSelectedIds.includes(m.id));
