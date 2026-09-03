@@ -24,12 +24,24 @@ from datetime import datetime
 # ---------------------------------------------------------
 # Logging Configuration
 # ---------------------------------------------------------
+# Log file is resolved relative to the script's own folder (or the app's
+# PSAUTO_RUN_OUTPUT_DIR, when the app hands one over) instead of the current
+# working directory - PS Automation launches this script with an arbitrary cwd.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_RUN_OUTPUT_DIR = os.environ.get("PSAUTO_RUN_OUTPUT_DIR", "").strip()
+LOG_DIR = _RUN_OUTPUT_DIR or SCRIPT_DIR
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+except Exception:
+    pass
+LOG_FILE_PATH = os.path.join(LOG_DIR, "fw_update.log")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("fw_update.log", encoding="utf-8")
+        logging.FileHandler(LOG_FILE_PATH, encoding="utf-8")
     ]
 )
 logger = logging.getLogger(__name__)
@@ -38,7 +50,6 @@ logger = logging.getLogger(__name__)
 # Global Constants
 # ---------------------------------------------------------
 DEFAULT_RACADM_PATH = r"C:\Program Files\Dell\SysMgt\iDRACTools\racadm\racadm.exe"
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CWD = os.getcwd()
 
 ABORT_SERVER_ON_FAILURE = False
@@ -88,6 +99,12 @@ def find_config_path():
             return path
 
     logger.error("config.json was not found next to the script or in the current folder.")
+    if not (sys.stdin is not None and sys.stdin.isatty()):
+        # Non-interactive run (launched by PS Automation - stdin is a closed
+        # pipe): prompting here would hang forever with zero output instead
+        # of failing. Fail fast with a clear error instead.
+        logger.error("Non-interactive run: cannot prompt for config.json path. Place config.json next to the script.")
+        sys.exit(1)
     print("\nconfig.json was not found.")
     print("Put config.json in the same folder as this Python script, or paste the full path now.")
     manual_path = input("Enter full config.json path: ").strip().strip('"')
@@ -763,6 +780,42 @@ def select_targets():
         "128": "NGINX",
     }
 
+    # Non-interactive path: PS Automation (or any headless caller) sets
+    # PSAUTO_TARGETS to "ALL" (or "1") for every server, or a comma/newline
+    # separated list of the menu suffixes (122,123,...) or server names
+    # (FM1,FM2,...). Falls back to the original interactive menu below when
+    # PSAUTO_TARGETS isn't set, so a standalone run is unchanged.
+    env_targets = os.environ.get("PSAUTO_TARGETS", "").strip()
+    if env_targets:
+        if env_targets.lower() in ("all", "1"):
+            selected_targets = set(suffix_map.values())
+            logger.info(f"PSAUTO_TARGETS=ALL -> Queue: {', '.join(sorted(selected_targets))}")
+            return selected_targets
+
+        selected_targets = set()
+        for item in re.split(r"[,\n\r]+", env_targets):
+            item = item.strip()
+            if not item:
+                continue
+            if item in suffix_map:
+                selected_targets.add(suffix_map[item])
+            elif item.upper() in suffix_map.values():
+                selected_targets.add(item.upper())
+            else:
+                logger.warning(f"PSAUTO_TARGETS: ignoring unrecognized target '{item}'.")
+
+        if not selected_targets:
+            logger.error("PSAUTO_TARGETS was set but no valid targets were recognized. Exiting.")
+            sys.exit(1)
+        logger.info(f"PSAUTO_TARGETS -> Queue: {', '.join(sorted(selected_targets))}")
+        return selected_targets
+
+    if not (sys.stdin is not None and sys.stdin.isatty()):
+        # Non-interactive run with no PSAUTO_TARGETS: prompting here would
+        # hang forever with zero output instead of failing.
+        logger.error("Non-interactive run: PSAUTO_TARGETS is not set. Set it to 'ALL' or a comma-separated list of target names/suffixes (e.g. FM1,FM2 or 122,123).")
+        sys.exit(1)
+
     selected_targets = set()
     print_menu()
 
@@ -809,9 +862,12 @@ def main():
 
     selected_targets = select_targets()
 
-    # Change here if needed.
-    username = "root"
-    password = "admin1234"
+    # Credentials: PSAUTO_USERNAME/PASSWORD (explicit override from the app's
+    # UI) wins; otherwise PSAUTO_DEFAULT_USERNAME/PASSWORD (the app's
+    # encrypted .env default) is used; a standalone run with neither set
+    # keeps the original hardcoded fallback below.
+    username = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip() or "root"
+    password = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "") or "admin1234"
 
     active_plans = []
     for plan_name, plan_data in plans.items():
@@ -824,7 +880,25 @@ def main():
     print("=============================================")
 
     plan_dirs = {}
+    non_interactive = not (sys.stdin is not None and sys.stdin.isatty())
+    env_base_dir = os.environ.get("PSAUTO_FW_BASE_DIR", "").strip().strip('"')
     for plan_name in active_plans:
+        # Non-interactive path: PSAUTO_FW_DIR_<PLAN> (e.g. PSAUTO_FW_DIR_FM)
+        # wins for that specific plan; PSAUTO_FW_BASE_DIR is a shared
+        # fallback applied to any plan without its own override. Falls back
+        # to the original interactive prompt below when neither is set.
+        env_dir = os.environ.get(f"PSAUTO_FW_DIR_{plan_name}", "").strip().strip('"') or env_base_dir
+        if env_dir:
+            if not os.path.exists(env_dir) or not os.path.isdir(env_dir):
+                logger.error(f"Firmware folder for plan '{plan_name}' does not exist: {env_dir}")
+                sys.exit(1)
+            plan_dirs[plan_name] = env_dir
+            continue
+
+        if non_interactive:
+            logger.error(f"Non-interactive run: no firmware folder configured for plan '{plan_name}'. Set PSAUTO_FW_DIR_{plan_name} or PSAUTO_FW_BASE_DIR.")
+            sys.exit(1)
+
         dir_path = input(f"Enter the base firmware folder path for {plan_name}: ").strip().strip('"')
         while not os.path.exists(dir_path) or not os.path.isdir(dir_path):
             print(f"ERROR: Directory '{dir_path}' does not exist!")
@@ -862,7 +936,7 @@ def main():
         for fw, stat in srv_summary.items():
             print(f"  - {fw}: {stat}")
     print("=============================================\n")
-    print(f"Log file: {os.path.abspath('fw_update.log')}")
+    print(f"Log file: {os.path.abspath(LOG_FILE_PATH)}")
 
 
 if __name__ == "__main__":

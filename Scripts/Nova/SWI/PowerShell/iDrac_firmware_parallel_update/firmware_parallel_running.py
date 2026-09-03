@@ -11,6 +11,18 @@ import msvcrt
 from concurrent.futures import ThreadPoolExecutor
 
 # ---------------------------------------------------------------------------
+# Paths - resolved relative to this script's own folder (not the current
+# working directory), since the automation app launches this script with an
+# arbitrary cwd. config.json always lives next to the script; the log file
+# honors $env:PSAUTO_RUN_OUTPUT_DIR when the app supplies one, falling back
+# to the script's own folder (its original, implicit location) otherwise.
+# ---------------------------------------------------------------------------
+SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
+OUTPUT_DIR  = os.environ.get("PSAUTO_RUN_OUTPUT_DIR") or SCRIPT_DIR
+LOG_PATH    = os.path.join(OUTPUT_DIR, "firmware_update.log")
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
@@ -18,7 +30,7 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("firmware_update.log", encoding="utf-8")
+        logging.FileHandler(LOG_PATH, encoding="utf-8")
     ]
 )
 logger = logging.getLogger(__name__)
@@ -97,7 +109,7 @@ def print_status_table():
         sys.stdout.write(text + "\n")
         sys.stdout.flush()
         try:
-            with open("firmware_update.log", "a", encoding="utf-8") as fh:
+            with open(LOG_PATH, "a", encoding="utf-8") as fh:
                 fh.write(text + "\n")
         except Exception:
             pass
@@ -338,39 +350,24 @@ def process_server(srv, ip, user, pwd, files, base_dir):
 # ---------------------------------------------------------------------------
 def main():
     # Pre-flight checks
-    if not os.path.exists("config.json"):
-        logger.error("CRITICAL: config.json not found in the current directory.")
+    if not os.path.exists(CONFIG_PATH):
+        logger.error(f"CRITICAL: config.json not found next to the script ({CONFIG_PATH}).")
         sys.exit(1)
     if not RACADM_PATH or not os.path.exists(RACADM_PATH):
         logger.error(f"CRITICAL: racadm.exe not found at {DEFAULT_RACADM_PATH} or in PATH.")
         sys.exit(1)
 
-    with open("config.json", "r", encoding="utf-8") as fh:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
         config = json.load(fh)
 
     global server_ips
     server_ips = config.get("servers", {})
 
-    # Credentials (env-var override; default root/admin1234)
-    user = os.getenv("IDRAC_USER",     "root")
-    pwd  = os.getenv("IDRAC_PASSWORD", "admin1234")
-
-    # ── Menu ────────────────────────────────────────────────────────────────
-    print("\n=============================================")
-    print("           iDRAC Firmware Update             ")
-    print("=============================================")
-    print("To run this on ALL servers Press - 1")
-    print("To Exit Press - 2")
-    print("")
-    print("Or enter specific IP suffixes to update (type 'done' when finished):")
-    print("To run this on FM1 Press - 122")
-    print("To run this on FM2 Press - 123")
-    print("To run this on PMC1 Press - 124")
-    print("To run this on PMC2 Press - 125")
-    print("To run this on PMC3 Press - 126")
-    print("To run this on SRVMGT Press - 127")
-    print("To run this on NGINX Press - 128")
-    print("=============================================")
+    # Credentials: PSAUTO_IDRAC_USER/PSAUTO_IDRAC_PASS (explicit override from
+    # the app's form) take priority, then the original IDRAC_USER/IDRAC_PASSWORD
+    # env vars, then the original hardcoded root/admin1234 default.
+    user = os.getenv("PSAUTO_IDRAC_USER") or os.getenv("IDRAC_USER",     "root")
+    pwd  = os.getenv("PSAUTO_IDRAC_PASS") or os.getenv("IDRAC_PASSWORD", "admin1234")
 
     suffix_map = {
         "122": "FM1",   "123": "FM2",
@@ -378,37 +375,77 @@ def main():
         "127": "SRVMGT","128": "NGINX"
     }
 
+    # Non-interactive target selection: PSAUTO_FIRMWARE_TARGETS holds a
+    # comma/whitespace-separated list of suffix codes (122, 123, ...) and/or
+    # server names (FM1, PMC2, ...), or the literal "ALL" - set by the app so
+    # this menu never blocks on input() when launched headlessly. Falls back
+    # to the original interactive menu below when the env var isn't set.
+    targets_env = os.environ.get("PSAUTO_FIRMWARE_TARGETS", "").strip()
     selected_targets = set()
-    while True:
-        choice = input("\nEnter option (1, 2), suffix, 'rm <suffix>' to remove, or 'done': ").strip().lower()
-        if choice == '1':
+    if targets_env:
+        tokens = [t for t in re.split(r'[,\s]+', targets_env) if t]
+        if any(t.upper() == "ALL" for t in tokens):
             selected_targets = set(suffix_map.values())
-            print(f"\nQueue: {', '.join(sorted(selected_targets))}")
-            break
-        elif choice == '2':
-            print("Exiting...")
-            sys.exit(0)
-        elif choice == 'done':
-            if not selected_targets:
-                print("No servers selected. Exiting.")
-                sys.exit(0)
-            break
-        elif choice.startswith("rm "):
-            rm_sfx = choice.split(" ", 1)[1].strip()
-            if rm_sfx in suffix_map:
-                srv = suffix_map[rm_sfx]
-                if srv in selected_targets:
-                    selected_targets.discard(srv)
-                    print(f"Removed {srv} from queue.")
-            else:
-                print(f"Invalid suffix '{rm_sfx}'.")
-            print(f"Current Queue: {', '.join(sorted(selected_targets))}" if selected_targets else "Current Queue: [Empty]")
-        elif choice in suffix_map:
-            selected_targets.add(suffix_map[choice])
-            print(f"Added {suffix_map[choice]} to queue.")
-            print(f"Current Queue: {', '.join(sorted(selected_targets))}")
         else:
-            print("Invalid value. Try again.")
+            for t in tokens:
+                if t in suffix_map:
+                    selected_targets.add(suffix_map[t])
+                elif t.upper() in suffix_map.values():
+                    selected_targets.add(t.upper())
+                else:
+                    logger.warning(f"PSAUTO_FIRMWARE_TARGETS: ignoring unknown target '{t}'.")
+        if not selected_targets:
+            logger.error("PSAUTO_FIRMWARE_TARGETS was set but no valid targets were resolved. Exiting.")
+            sys.exit(1)
+        logger.info(f"Non-interactive target selection (PSAUTO_FIRMWARE_TARGETS): {', '.join(sorted(selected_targets))}")
+    else:
+        # ── Menu ────────────────────────────────────────────────────────────
+        print("\n=============================================")
+        print("           iDRAC Firmware Update             ")
+        print("=============================================")
+        print("To run this on ALL servers Press - 1")
+        print("To Exit Press - 2")
+        print("")
+        print("Or enter specific IP suffixes to update (type 'done' when finished):")
+        print("To run this on FM1 Press - 122")
+        print("To run this on FM2 Press - 123")
+        print("To run this on PMC1 Press - 124")
+        print("To run this on PMC2 Press - 125")
+        print("To run this on PMC3 Press - 126")
+        print("To run this on SRVMGT Press - 127")
+        print("To run this on NGINX Press - 128")
+        print("=============================================")
+
+        while True:
+            choice = input("\nEnter option (1, 2), suffix, 'rm <suffix>' to remove, or 'done': ").strip().lower()
+            if choice == '1':
+                selected_targets = set(suffix_map.values())
+                print(f"\nQueue: {', '.join(sorted(selected_targets))}")
+                break
+            elif choice == '2':
+                print("Exiting...")
+                sys.exit(0)
+            elif choice == 'done':
+                if not selected_targets:
+                    print("No servers selected. Exiting.")
+                    sys.exit(0)
+                break
+            elif choice.startswith("rm "):
+                rm_sfx = choice.split(" ", 1)[1].strip()
+                if rm_sfx in suffix_map:
+                    srv = suffix_map[rm_sfx]
+                    if srv in selected_targets:
+                        selected_targets.discard(srv)
+                        print(f"Removed {srv} from queue.")
+                else:
+                    print(f"Invalid suffix '{rm_sfx}'.")
+                print(f"Current Queue: {', '.join(sorted(selected_targets))}" if selected_targets else "Current Queue: [Empty]")
+            elif choice in suffix_map:
+                selected_targets.add(suffix_map[choice])
+                print(f"Added {suffix_map[choice]} to queue.")
+                print(f"Current Queue: {', '.join(sorted(selected_targets))}")
+            else:
+                print("Invalid value. Try again.")
 
     # ── Firmware directory paths ─────────────────────────────────────────────
     plans = config.get("plans", {})
@@ -417,17 +454,31 @@ def main():
         if any(t in selected_targets for t in data.get("targets", []))
     ]
 
-    print("\n=============================================")
-    print("        FIRMWARE DIRECTORY PATHS             ")
-    print("=============================================")
+    # Non-interactive firmware folders: PSAUTO_FIRMWARE_BASE_DIR points at a
+    # base folder holding one subfolder per plan name (FM, PMC, SRVMGT, NGINX
+    # - matching the "plans" keys in config.json), each containing that
+    # plan's firmware files. Falls back to the original interactive per-plan
+    # prompt below when the env var isn't set.
+    base_dir_env = os.environ.get("PSAUTO_FIRMWARE_BASE_DIR", "").strip()
     plan_dirs = {}
-    for plan_name in active_plans:
-        while True:
-            dir_path = input(f"Enter the firmware folder path for plan [{plan_name}]: ").strip().strip('"')
-            if os.path.isdir(dir_path):
-                plan_dirs[plan_name] = dir_path
-                break
-            print(f"ERROR: Directory '{dir_path}' does not exist! Please try again.")
+    if base_dir_env:
+        for plan_name in active_plans:
+            candidate = os.path.join(base_dir_env, plan_name)
+            if os.path.isdir(candidate):
+                plan_dirs[plan_name] = candidate
+            else:
+                logger.error(f"PSAUTO_FIRMWARE_BASE_DIR: folder '{candidate}' for plan [{plan_name}] not found - skipping this plan.")
+    else:
+        print("\n=============================================")
+        print("        FIRMWARE DIRECTORY PATHS             ")
+        print("=============================================")
+        for plan_name in active_plans:
+            while True:
+                dir_path = input(f"Enter the firmware folder path for plan [{plan_name}]: ").strip().strip('"')
+                if os.path.isdir(dir_path):
+                    plan_dirs[plan_name] = dir_path
+                    break
+                print(f"ERROR: Directory '{dir_path}' does not exist! Please try again.")
 
     # ── Pre-populate progress table ──────────────────────────────────────────
     with data_lock:

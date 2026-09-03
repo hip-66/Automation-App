@@ -1,9 +1,11 @@
 # Secrets - never commit
 .env
+fleet_machines.json
 
 # Generated at runtime
 Outputs/
 Logs/
+Uploads/
 history.json
 app_errors.log
 

@@ -8,6 +8,7 @@ iDRAC (Redfish) APIs to populate "LinkFlex Inventory.xlsx" automatically.
 import os
 import sys
 import re
+import json
 import glob
 import shutil
 import queue
@@ -34,13 +35,16 @@ import openpyxl
 import requests
 import urllib3
 
+# Tkinter is only needed for the manual/standalone GUI path - imported
+# lazily-but-safely here (not required, not fatal if missing) so headless
+# mode (see run_headless() / main()) still works on a machine without
+# tcl/tk, which is exactly the kind of constrained VM this app runs on.
 try:
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox, scrolledtext
+    _TKINTER_AVAILABLE = True
 except ImportError:
-    print("[FATAL] Tkinter is not available in this Python installation.")
-    print("        On Windows, reinstall Python from python.org with the 'tcl/tk' option enabled.")
-    sys.exit(1)
+    _TKINTER_AVAILABLE = False
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -870,7 +874,126 @@ class InventoryApp:
         self.log_text.configure(state="disabled")
 
 
+def run_headless():
+    """Entry point when launched by PS Automation as a subprocess (no display
+    available - the GUI above can't run). Config comes from PSAUTO_* env vars
+    instead of the Tkinter form; the same processing functions run unchanged.
+
+    Unlike the GUI's "pick a working folder" flow (which auto-discovers the
+    single .xlsx/firewall .txt already sitting there), this always starts
+    from the read-only template next to this script and writes a fresh,
+    uniquely-named copy - so concurrent/repeated runs never collide or
+    silently overwrite each other or the template itself."""
+    def log(message):
+        print(message, flush=True)
+
+    def confirm(title, message):
+        # No one can answer a dialog in a headless subprocess - log clearly
+        # and skip that save step rather than hang forever.
+        log(f"[WARNING] {title}: {message.splitlines()[0]} - skipping (make sure the file isn't open elsewhere and re-run if needed).")
+        return False
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    template_path = os.path.join(script_dir, "LinkFlex Inventory-SP_SRV.xlsx")
+    if not os.path.exists(template_path):
+        log(f"[FATAL] Template not found next to the script: {template_path}")
+        sys.exit(1)
+
+    # PS Automation tells us exactly where this run's output belongs (see
+    # PSAUTO_RUN_OUTPUT_DIR in server.py's _launch_run) - written there
+    # directly rather than next to the script, since a generic sweep-by-
+    # extension would also scoop up and relocate the read-only template
+    # sitting in this same folder. Falls back to writing next to the script
+    # (like before) if that variable isn't set, e.g. someone exporting the
+    # other PSAUTO_* vars by hand outside the app.
+    output_dir = os.environ.get("PSAUTO_RUN_OUTPUT_DIR", "").strip() or script_dir
+    os.makedirs(output_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_path = os.path.join(output_dir, f"LinkFlex_Inventory_Filled_{timestamp}.xlsx")
+    shutil.copy2(template_path, out_path)
+    log(f"[INFO] Working copy created: {os.path.basename(out_path)}")
+
+    firewall_src = os.environ.get("PSAUTO_FIREWALL_FILE", "").strip()
+    firewall_tmp_name = f"ATP_LinkFlex_Firewall_{timestamp}.txt"
+    if firewall_src and os.path.isfile(firewall_src):
+        shutil.copy2(firewall_src, os.path.join(script_dir, firewall_tmp_name))
+        log(f"[INFO] Firewall report received: {os.path.basename(firewall_src)}")
+    else:
+        log("[WARNING] No firewall report uploaded - firewall MAC/serial fields will be left as-is.")
+
+    prox_cfg = {
+        "prox_url": os.environ.get("PSAUTO_PROXMOX_URL", "").strip(),
+        "prox_user": os.environ.get("PSAUTO_PROXMOX_USER", "").strip(),
+        "prox_pass": os.environ.get("PSAUTO_PROXMOX_PASS", ""),
+    }
+
+    # Each PVE host has its OWN iDRAC IP (there's no single shared address),
+    # so the app sends a JSON list of {"server": "PVE1", "url": "..."} for
+    # however many were checked - zero, one, or all three - login (user/pass)
+    # is the same account for all of them. See PSAUTO_IDRAC_TARGETS in
+    # server.py's _launch_run and the idrac_targets field in app.js.
+    idrac_user = os.environ.get("PSAUTO_IDRAC_USER", "").strip()
+    idrac_pass = os.environ.get("PSAUTO_IDRAC_PASS", "")
+    idrac_targets_raw = os.environ.get("PSAUTO_IDRAC_TARGETS", "").strip()
+    idrac_targets = []
+    if idrac_targets_raw:
+        try:
+            idrac_targets = json.loads(idrac_targets_raw)
+        except Exception as e:
+            log(f"[ERROR] Could not parse iDRAC target list: {e}")
+
+    wb, ws = load_workbook_safe(out_path, log, confirm)
+    if wb is None:
+        sys.exit(1)
+
+    any_saved = False
+    process_firewall(script_dir, ws, log)
+    any_saved |= save_excel_safe(wb, out_path, log, confirm)
+    process_proxmox_api(ws, prox_cfg, log)
+    any_saved |= save_excel_safe(wb, out_path, log, confirm)
+
+    if not idrac_targets:
+        log("\n[INFO] No iDRAC server selected - skipping iDRAC processing.")
+    for target in idrac_targets:
+        server_name = str(target.get("server", "")).strip()
+        idrac_url = str(target.get("url", "")).strip()
+        if not server_name or not idrac_url:
+            log(f"[WARNING] Skipping incomplete iDRAC target: {target}")
+            continue
+        idrac_cfg = {
+            "idrac_url": idrac_url, "idrac_user": idrac_user, "idrac_pass": idrac_pass,
+            "server_name": server_name,
+        }
+        process_idrac_api(ws, idrac_cfg, log)
+        any_saved |= save_excel_safe(wb, out_path, log, confirm)
+
+    if firewall_src:
+        try:
+            os.remove(os.path.join(script_dir, firewall_tmp_name))
+        except Exception:
+            pass  # best-effort cleanup of the temp copy - never fails the run over it
+
+    if any_saved:
+        log(f"[SUCCESS] Inventory saved: {os.path.basename(out_path)}")
+    else:
+        log("[WARNING] Nothing was saved - the output file may be incomplete.")
+    sys.exit(0 if any_saved else 1)
+
+
 def main():
+    # PSAUTO_PROXMOX_URL is only ever set when PS Automation launches this
+    # script - a real interactive/manual run never has it, so this can't
+    # accidentally swallow a normal double-click launch.
+    if os.environ.get("PSAUTO_PROXMOX_URL"):
+        run_headless()
+        return
+
+    if not _TKINTER_AVAILABLE:
+        print("[FATAL] Tkinter is not available in this Python installation.")
+        print("        On Windows, reinstall Python from python.org with the 'tcl/tk' option enabled.")
+        sys.exit(1)
+
     root = tk.Tk()
     try:
         style = ttk.Style()

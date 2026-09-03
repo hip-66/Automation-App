@@ -179,6 +179,12 @@ CHROMEDRIVERS_DIR = os.path.join(BASE_DIR, "Chromedrivers")
 RESULTS_DIR = os.path.join(BASE_DIR, "Outputs")             # generated .docx reports only
 REPORT_FOLDER_DIR = os.path.join(BASE_DIR, "Logs")          # logs + run history
 GUIDES_DIR = os.path.join(BASE_DIR, "Guides")               # platform documentation (docx/xlsx)
+UPLOADS_DIR = os.path.join(BASE_DIR, "Uploads")              # user-uploaded run inputs (e.g. LinkFlex firewall report)
+# LinkFlex fleet inventory (Fleet CLI page) - passwords encrypted with this
+# machine's own ENCRYPTION_KEY (same as .env), so - like .env - this file is
+# machine-local and git-ignored; it won't portably sync to another machine's
+# repo clone since a different machine has a different key.
+FLEET_FILE = os.path.join(BASE_DIR, "fleet_machines.json")
 # Per-run artifacts live in auto-created folders named
 # "<script>_<date>_<time>" - under Logs/ for the run log (+ validation
 # logs), and under Outputs/ for the generated .docx files.
@@ -422,6 +428,21 @@ def save_companies(companies):
     with open(COMPANIES_FILE, "w", encoding="utf-8") as f:
         json.dump(companies, f, ensure_ascii=False, indent=2)
 
+def load_fleet_machines():
+    if os.path.exists(FLEET_FILE):
+        try:
+            with open(FLEET_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+        except Exception as e:
+            server_logger.error(f"Error loading fleet_machines.json: {e}")
+    return []
+
+def save_fleet_machines(machines):
+    with open(FLEET_FILE, "w", encoding="utf-8") as f:
+        json.dump(machines, f, ensure_ascii=False, indent=2)
+
 def slugify_key(text):
     key = re.sub(r"[^a-z0-9_]+", "_", text.strip().lower()).strip("_")
     return key or f"item_{int(time.time())}"
@@ -596,7 +617,7 @@ def save_profiles(profiles):
 #   * power-down-servers.ps1  == power_down_servers.py ("racadm serveraction powerdown")
 #   * set-idrac-hostname.ps1  == set_idrac_hostname.py (same iDRAC hostname push)
 EXCLUDED_SCRIPT_BASENAMES = {"mdevalidation.ps1", "power-down-servers.ps1", "set-idrac-hostname.ps1"}
-AUTO_IGNORED_DIRS = {"validations", "__pycache__"}
+AUTO_IGNORED_DIRS = {"validations", "__pycache__", "old"}
 
 # File types treated as "report products" of a script run - these get swept
 # into the run's dated Outputs/<run> folder and listed on the Outputs page.
@@ -679,6 +700,50 @@ KNOWN_SCRIPT_DISPLAY = {
     "configure_ntp+dns.ps1": {
         "description": "עדכון שרתי DNS ו-NTP על שרתי Red Hat דרך SSH - מוסיף כתובות לראש /etc/resolv.conf ו-/etc/chrony.conf",
         "description_en": "Updates DNS and NTP servers on Red Hat server(s) over SSH - pushes addresses to the top of /etc/resolv.conf and /etc/chrony.conf"
+    },
+    "linkflex_inventory_automation_gui.py": {
+        "description": "ממלא אוטומטית את גיליון LinkFlex Inventory: MAC-ים מדוח ה-Firewall שהועלה, MAC-ים של ה-VMs מ-Proxmox, ו-MAC-ים/מספרי סידוריים של דיסקים מה-iDRAC (Redfish)",
+        "description_en": "Auto-fills the LinkFlex Inventory spreadsheet: MACs from the uploaded Firewall report, VM MACs from Proxmox, and NIC MACs/disk serial numbers from iDRAC (Redfish)"
+    },
+    "atp_nexyte_netapp_validation.ps1": {
+        "description": "דוח ולידציה מלא לאשכול NetApp ONTAP דרך SSH (plink) - מריץ כ-33 פקודות בדיקה (disks, aggregates, volumes, network, LUNs, snapmirror, licensing ועוד) ושומר את הפלט המלא לקובץ טקסט אחד",
+        "description_en": "Full NetApp ONTAP cluster validation report over SSH (plink) - runs ~33 diagnostic commands (disks, aggregates, volumes, network, LUNs, snapmirror, licensing and more) and saves the complete output to one text file"
+    },
+    "step_16_vms_network_tuning - connectx family mlx5gen virtual function.ps1": {
+        "description": "מגדיר Jumbo Packet ומבטל LSO (IPv4/IPv6) עבור מתאמי ConnectX Family mlx5Gen Virtual Function; ניתן לספק רשימת מתאמים מותאמת אישית או להשתמש בברירת המחדל של שני המתאמים המובנים",
+        "description_en": "Configures Jumbo Packet and disables LSO (IPv4/IPv6) on ConnectX Family mlx5Gen Virtual Function NICs; adapter names can be supplied as a target list or default to the two built-in VF names"
+    },
+    "step_16_host_network_tuning - mellanox connectx-6 lx adapter.ps1": {
+        "description": "מכוונן כרטיסי רשת Mellanox ConnectX-6 Lx בשרת המקומי (Jumbo Packet, ביטול LSO v2 עבור IPv4/IPv6); ניתן להגדיר את רשימת שמות הכרטיסים או להשתמש בברירת המחדל של הזוג המובנה",
+        "description_en": "Tunes Mellanox ConnectX-6 Lx adapter(s) on the local host (Jumbo Packet, disables LSO v2 for IPv4/IPv6); adapter name list is overridable or defaults to the standard onboard pair"
+    },
+    "step4_antivirus_certificates.ps1": {
+        "description": "אוסף שם מארח, כתובות MAC וגרסת מערכת הפעלה משרתי Hub Anti-Virus (דרך SSH/Invoke-Command) וממלא אותם בתבנית Word של התעודה",
+        "description_en": "Collects hostname, MAC addresses and OS version from the Hub Anti-Virus servers (via Invoke-Command) and fills them into the Word certificate template"
+    },
+    "powershell_atp_idrac_report.ps1": {
+        "description": "מפיק דוח Word מאוחד על מצב תצורת ה-iDRAC (דורות 9 ו-10) של שרתי NovaHUB ATP, כולל צילומי מסך של לוח הבקרה, הרשת, האחסון, הקושחה וההגדרות - מסומן ב-PO/SO/SN",
+        "description_en": "Generates a unified Word iDRAC health/configuration report for NovaHUB ATP's iDRAC 9 and 10 servers, with screenshots of dashboard, network, storage, firmware and BIOS settings - labeled with PO/SO/SN"
+    },
+    "atp_idrac_report.py": {
+        "description": "מתחבר לשרתי iDRAC 9 ו-10 באמצעות Chrome (Playwright), מצלם כל דף הגדרות מרכזי, ומרכיב דוח Word אחד (ATP) הכולל מספרי PO/SO/SN",
+        "description_en": "Logs into iDRAC 9/10 servers via Playwright-driven Chrome, screenshots each key configuration page, and compiles a single Word (ATP) report labeled with PO/SO/SN"
+    },
+    "racadm_report.py": {
+        "description": "בודק קבוצת שרתי iDRAC של Dell (בתפקידי FM/PMC/SRVMGT/NGINX) דרך racadm ומפיק דוח Word המשווה הגדרות BIOS/קושחה/רשת/אחסון בפועל מול הערכים הנדרשים",
+        "description_en": "Audits a set of Dell iDRAC servers (FM/PMC/SRVMGT/NGINX roles) via racadm and produces a Word compliance report comparing actual BIOS/firmware/network/storage settings against expected targets"
+    },
+    "service tag for all.ps1": {
+        "description": "אוסף Service Tag מכל שרת iDRAC יעד (racadm getsysinfo) ומדפיס רשימת סיכום נקייה",
+        "description_en": "Collects the Dell Service Tag from each target iDRAC (racadm getsysinfo) and prints a clean summary list"
+    },
+    "idrac_firmware_update.py": {
+        "description": "מפעיל תוכניות עדכון קושחה של Dell iDRAC/RACADM (BIOS, iDRAC, CPLD, דרייברים, רשת, RAID/PERC ועוד) על שרתי NOVA SWI נבחרים, כולל בדיקת גרסה מקדימה ומעקב אחר משימות",
+        "description_en": "Applies Dell iDRAC/RACADM firmware update plans (BIOS, iDRAC, CPLD, drivers, network, RAID/PERC, etc.) to selected NOVA SWI servers, with version pre-checks and job monitoring - runs sequentially, one server at a time"
+    },
+    "firmware_parallel_running.py": {
+        "description": "מעדכן קושחה (Firmware) במקביל על שרתי ה-SWI של NOVA לפי תוכניות המוגדרות מראש - גרסה מקבילית (מספר שרתים בו-זמנית) של אוטומציית עדכון הקושחה",
+        "description_en": "Updates firmware in parallel across NOVA SWI servers using predefined plans - the parallel (multiple servers at once) counterpart of the sequential firmware update automation"
     }
 }
 
@@ -740,6 +805,55 @@ INPUTS_OVERRIDE_BY_BASENAME = {
     # both range-expandable in the form; a shared Netmask + Gateway for all
     # servers; and an editable iDRAC login.
     "change_ip.py": ["ips", "newips", "netmask", "gateway", "username", "password"],
+    # LinkFlex Inventory: Proxmox + iDRAC connection details, a target iDRAC
+    # server (PVE1/2/3), and an uploaded firewall report - no ips field at
+    # all, since targets here are fixed connection endpoints, not a scanned
+    # range/list of servers.
+    "linkflex_inventory_automation_gui.py": [
+        "prox_url", "prox_user", "prox_pass",
+        "idrac_targets", "idrac_user", "idrac_pass",
+        "firewall_file",
+    ],
+    # NetApp ONTAP validation: a single cluster IP (not a range/list - reuses
+    # the "ips" field/addresses.txt mechanism for just one target) + an SSH
+    # login (defaults to the app's configured SSH credentials, editable).
+    "atp_nexyte_netapp_validation.ps1": ["ips", "username", "password", "use_default_creds"],
+    # Anti Virus cert collector: no target-list field (it's a fixed set of
+    # role-specific Device1..7 hosts baked into the script's own template-
+    # filling logic - not a drop-in address list), just the iDRAC-style login
+    # (Get-Credential replaced with PSAUTO_USERNAME/PASSWORD, else the original
+    # popup for a standalone run).
+    "step4_antivirus_certificates.ps1": ["username", "password"],
+    # PowerShell iDRAC ATP report: explicit override (rather than relying on
+    # auto-detection) so PO/SO/SN and the credential fields all show up
+    # together - auto-detection alone would only catch "ips"/"chromedriver".
+    "powershell_atp_idrac_report.ps1": [
+        "ips", "po_number", "so_number", "sn_number",
+        "username", "password", "use_default_creds", "chromedriver",
+    ],
+    # Python sibling of the above (Playwright, not Selenium/ChromeDriver -
+    # no "chromedriver" field here).
+    "atp_idrac_report.py": [
+        "ips", "po_number", "so_number", "sn_number",
+        "username", "password", "use_default_creds",
+    ],
+    # racadm BIOS/firmware/network/storage compliance audit - no input()/
+    # Read-Host prompts at all (was fully hardcoded before this session's
+    # refactor), so auto-detection would return an empty form.
+    "racadm_report.py": ["ips", "username", "password", "use_default_creds"],
+    # Service Tag collector - same reasoning as racadm_report.py above.
+    "service tag for all.ps1": ["ips", "username", "password", "use_default_creds"],
+    # Sequential iDRAC firmware updater: a named target-server selection
+    # (not a flat IP list - see PSAUTO_TARGETS in the script) plus the
+    # firmware files' base folder.
+    "idrac_firmware_update.py": ["targets", "username", "password", "use_default_creds", "fw_base_dir"],
+    # Parallel iDRAC firmware updater - its own target/folder field names
+    # (kept distinct from the sequential version's "targets"/"fw_base_dir"
+    # since both scripts could in principle run from the same catalog) and
+    # the LinkFlex-style idrac_user/idrac_pass pair (no idrac_targets here,
+    # so these render as plain fields via the generic fallback, not the
+    # per-server checkbox UI).
+    "firmware_parallel_running.py": ["firmware_targets", "firmware_base_dir", "idrac_user", "idrac_pass"],
 }
 
 _RE_READHOST_PROMPT = re.compile(r'read-host\s*(?:-prompt\s*)?["\']([^"\']*)["\']', re.IGNORECASE)
@@ -917,6 +1031,23 @@ _CATEGORY_BY_BASENAME = {
     # Read-only hostname check (makes no changes) - would otherwise auto-match
     # the "configuration" keyword rule via "hostname" in the filename.
     "get_idrac_hostname.py":  "report",
+    # Produces the LinkFlex inventory spreadsheet - a report, not a config
+    # change (would otherwise fall through every keyword rule to "general").
+    "linkflex_inventory_automation_gui.py": "report",
+    # Its own dedicated category rather than falling into "validation" -
+    # NetApp-specific, distinct from the generic MDE/ATP validation scripts.
+    "atp_nexyte_netapp_validation.ps1": "netapp",
+    # Collects/reports info into a Word certificate template - no keyword
+    # rule matches this filename, would otherwise fall through to "general".
+    "step4_antivirus_certificates.ps1": "report",
+    # Collects and prints Service Tags - a report, not a config change; no
+    # keyword rule matches this filename either.
+    "service tag for all.ps1": "report",
+    # Firmware updates aren't covered by any keyword rule, and both scripts
+    # can power-cycle a stuck server as part of the job - group with "power"
+    # rather than falling through to "general".
+    "idrac_firmware_update.py": "power",
+    "firmware_parallel_running.py": "power",
 }
 
 def classify_script_category(basename_lower):
@@ -932,7 +1063,7 @@ def classify_script_category(basename_lower):
 # (SSH default: DEFAULT_SSH_USERNAME_ENC/PASSWORD_ENC vs iDRAC default:
 # DEFAULT_CRED_USERNAME_ENC/PASSWORD_ENC), so the frontend needs to know which
 # one to pre-fill. Exposed as each script's "cred_kind" ("ssh" or "idrac").
-_SSH_CRED_BASENAMES = {"configure_ntp+dns.ps1", "mdevalidation2.0.ps1"}
+_SSH_CRED_BASENAMES = {"configure_ntp+dns.ps1", "mdevalidation2.0.ps1", "atp_nexyte_netapp_validation.ps1"}
 
 def classify_cred_kind(basename_lower):
     return "ssh" if basename_lower in _SSH_CRED_BASENAMES else "idrac"
@@ -1648,6 +1779,24 @@ def run_script_worker(run_id, process):
                         run_info["output_file"] = os.path.basename(dst)
         except Exception as e:
             server_logger.warning(f"Auto-move of report files to Outputs failed: {e}")
+
+    # Some scripts (e.g. LinkFlex Inventory) write their finished output
+    # directly to PSAUTO_RUN_OUTPUT_DIR (told to them at launch, see
+    # _launch_run) instead of relying on the sweep above - needed whenever a
+    # pre-existing template of the same extension already lives next to the
+    # script, since sweeping ANY matching extension there would also scoop up
+    # and relocate that template. Always registers whatever's already there,
+    # independent of the auto_move_docx setting above (this isn't a stray-file
+    # sweep - the script deliberately placed it at this exact path).
+    try:
+        run_results_dir = os.path.join(results_dir, run_dir_name)
+        if os.path.isdir(run_results_dir):
+            for fname in os.listdir(run_results_dir):
+                fpath = os.path.join(run_results_dir, fname)
+                if os.path.isfile(fpath):
+                    _add_output(run_info, fname, fpath)
+    except Exception as e:
+        server_logger.warning(f"Registering directly-written outputs failed: {e}")
 
     try:
         run_validations_dir = os.path.join(run_info.get("cwd", SCRIPTS_DIR), "Validations")
@@ -2527,6 +2676,13 @@ def _launch_run(data, user):
             server_logger.warning(f"Pre-run stray report sweep failed: {e}")
 
         run_id = str(uuid.uuid4())
+        # Captured once and reused below for active_runs[run_id]["started_ts"]
+        # (instead of a second, slightly-later time.time() call) so the run
+        # folder name a script is told about via PSAUTO_RUN_OUTPUT_DIR is
+        # GUARANTEED to be the exact same one run_script_worker() computes
+        # later when sweeping/registering outputs - any drift between the two
+        # clock reads would point them at two different folders.
+        started_ts = time.time()
 
         # Prepare environment variables
         env = os.environ.copy()
@@ -2707,6 +2863,65 @@ def _launch_run(data, user):
                 return {"error": "RAID name is required (a RAID must have a name)."}, 400
             env["PSAUTO_RAID_NAME"] = raid_name
 
+        # LinkFlex Inventory automation: Proxmox/iDRAC connection fields and
+        # the uploaded firewall report path (see /api/upload). A dedicated
+        # simple-passthrough block rather than one env var per line, since
+        # these are one-off fields used by a single script, not a shared
+        # convention like username/password.
+        _LINKFLEX_FIELD_TO_ENV = {
+            "prox_url": "PSAUTO_PROXMOX_URL", "prox_user": "PSAUTO_PROXMOX_USER",
+            "prox_pass": "PSAUTO_PROXMOX_PASS",
+            "idrac_user": "PSAUTO_IDRAC_USER", "idrac_pass": "PSAUTO_IDRAC_PASS",
+        }
+        for field, env_name in _LINKFLEX_FIELD_TO_ENV.items():
+            if field in inputs and field in data:
+                env[env_name] = str(data.get(field, ""))
+        if "idrac_targets" in inputs:
+            # Each PVE host has its own iDRAC IP (no single shared address),
+            # so the frontend sends a JSON list of the checked
+            # {"server": "PVE1", "url": "..."} targets - zero, one, or all
+            # three - rather than one fixed server+url pair.
+            targets_raw = data.get("idrac_targets")
+            if targets_raw:
+                if not isinstance(targets_raw, list) or not all(
+                    isinstance(t, dict) and t.get("server") and t.get("url") for t in targets_raw
+                ):
+                    return {"error": "Invalid iDRAC target list."}, 400
+                env["PSAUTO_IDRAC_TARGETS"] = json.dumps(targets_raw)
+        if "firewall_file" in inputs:
+            firewall_path = str(data.get("firewall_file_path") or "").strip()
+            if firewall_path:
+                safe_upload = _safe_upload_path(firewall_path)
+                if not safe_upload:
+                    return {"error": "Invalid or expired uploaded file - please browse and select it again."}, 400
+                env["PSAUTO_FIREWALL_FILE"] = safe_upload
+
+        # Generic one-off text fields a handful of NOVA scripts declare for
+        # their own bespoke needs (a PO/SO/SN metadata prompt, a firmware
+        # target/folder selection) - passed straight through as
+        # PSAUTO_<FIELD_NAME_UPPERCASE> with no other handling, unlike
+        # ips/username/password/etc which each need their own logic above.
+        # The frontend renders a plain labeled text field for any of these
+        # (see the generic fallback in renderForm(), static/app.js).
+        _GENERIC_PASSTHROUGH_FIELDS = [
+            "po_number", "so_number", "sn_number",
+            "targets", "fw_base_dir", "firmware_targets", "firmware_base_dir",
+        ]
+        for field in _GENERIC_PASSTHROUGH_FIELDS:
+            if field in inputs and field in data:
+                env[f"PSAUTO_{field.upper()}"] = str(data.get(field, ""))
+
+        # Some scripts write their final report directly to a known location
+        # instead of relying on the generic Scripts/-wide sweep below (e.g.
+        # when a pre-existing template of the same extension already lives
+        # next to the script, like LinkFlex's .xlsx - sweeping ANY matching
+        # extension would also scoop up and relocate that template). Told
+        # the run's own dated Outputs folder up front; run_script_worker()
+        # picks up anything already sitting there once the process exits.
+        run_stamp_preview = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime(started_ts))
+        safe_script_name_preview = re.sub(r'[<>:"/\\|?*]+', "_", script_meta["name"]).strip() or "run"
+        env["PSAUTO_RUN_OUTPUT_DIR"] = os.path.join(effective_results_dir(), f"{safe_script_name_preview}_{run_stamp_preview}")
+
         # Start process (no extra window is opened - see CREATE_NO_WINDOW)
         try:
             process = subprocess.Popen(
@@ -2766,7 +2981,7 @@ def _launch_run(data, user):
             "user": user,
             "logs": [note + "\n" for note in system_notes],
             "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "started_ts": time.time(),
+            "started_ts": started_ts,
             "ended_at": "",
             "duration_seconds": 0,
             "cwd": cwd,
@@ -3226,7 +3441,11 @@ SAFE_LOG_OPEN_EXTS = {".log", ".txt"}
 def _safe_output_open_path(path):
     """Return the resolved absolute path if `path` is a safe file inside an
     approved root (Outputs / effective_results_dir() / Logs) with an allowed
-    extension for that root, otherwise None."""
+    extension for that root, otherwise None. Guides are deliberately NOT an
+    approved root here - they're shared read-only reference documents, and
+    the Guides viewer always uses the in-app preview (see
+    previewFileInBrowser) instead of os.startfile(), so a stray edit in Word
+    can never get saved back over the master file."""
     if not path or not isinstance(path, str):
         return None
     # (root, allowed-extensions) pairs, checked in order.
@@ -3439,6 +3658,172 @@ def scan_guides():
 @app.route('/api/guides', methods=['GET'])
 def api_guides():
     return jsonify(scan_guides())
+
+# ---------------------------------------------------------------------------
+# API: run-input file uploads (currently just the LinkFlex firewall report).
+# Uploaded files are ephemeral - stored under Uploads/ with a random prefix
+# so two people can't collide on the same filename, cleaned up opportunistically
+# (see _cleanup_old_uploads) rather than tracked per-run, since a script only
+# ever needs to read the file once, shortly after it's uploaded.
+# ---------------------------------------------------------------------------
+UPLOAD_ALLOWED_EXTS = {".txt"}
+UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
+
+def _cleanup_old_uploads():
+    try:
+        if not os.path.isdir(UPLOADS_DIR):
+            return
+        cutoff = time.time() - UPLOAD_MAX_AGE_SECONDS
+        for fname in os.listdir(UPLOADS_DIR):
+            fpath = os.path.join(UPLOADS_DIR, fname)
+            try:
+                if os.path.isfile(fpath) and os.path.getmtime(fpath) < cutoff:
+                    os.remove(fpath)
+            except OSError:
+                pass
+    except Exception as e:
+        server_logger.warning(f"Upload cleanup failed: {e}")
+
+def _safe_upload_path(path):
+    """Confirm `path` is an existing file actually inside UPLOADS_DIR - the
+    run payload's firewall_file_path is client-supplied JSON, so this closes
+    off using it as an arbitrary-file-read primitive to hand some unrelated
+    server path to a script via PSAUTO_FIREWALL_FILE."""
+    if not path or not isinstance(path, str):
+        return None
+    try:
+        root = os.path.normcase(os.path.realpath(UPLOADS_DIR))
+        resolved = os.path.realpath(path)
+    except Exception:
+        return None
+    resolved_nc = os.path.normcase(resolved)
+    if resolved_nc != root and not resolved_nc.startswith(root + os.sep):
+        return None
+    if not os.path.isfile(resolved):
+        return None
+    return resolved
+
+@app.route('/api/upload', methods=['POST'])
+def api_upload():
+    _cleanup_old_uploads()
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"ok": False, "error": "No file provided"}), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in UPLOAD_ALLOWED_EXTS:
+        return jsonify({"ok": False, "error": f"File type '{ext}' is not allowed for upload"}), 400
+
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    safe_name = re.sub(r'[<>:"/\\|?*]+', "_", os.path.basename(f.filename))
+    dest_name = f"{uuid.uuid4().hex}_{safe_name}"
+    dest_path = os.path.join(UPLOADS_DIR, dest_name)
+    f.save(dest_path)
+    server_logger.info(f"Uploaded run-input file: {dest_path}")
+    return jsonify({"ok": True, "path": dest_path, "filename": f.filename})
+
+# ---------------------------------------------------------------------------
+# API: LinkFlex Fleet - a checkbox-selectable inventory of LinkFlex machines
+# with one CLI box that runs a typed command over SSH (plink) on every
+# selected machine in parallel. Deliberately no extra confirmation gate
+# beyond "select machines, then Run" - this is meant to be a fast admin
+# tool, not a guided wizard; the operator is trusted to know what they're
+# typing (same trust level as sitting at a terminal).
+# ---------------------------------------------------------------------------
+_plink_path_cache = {"value": None}
+
+def _resolve_plink():
+    """PATH first (a real PuTTY/plink install), else a cached download in
+    %TEMP% (same URL already trusted elsewhere in this app, e.g.
+    ATP_Nexyte_NetApp_Validation.ps1), downloaded once and reused."""
+    if _plink_path_cache["value"] and os.path.exists(_plink_path_cache["value"]):
+        return _plink_path_cache["value"]
+    import shutil as _shutil
+    found = _shutil.which("plink") or _shutil.which("plink.exe")
+    if found:
+        _plink_path_cache["value"] = found
+        return found
+    cached = os.path.join(os.environ.get("TEMP", BASE_DIR), "plink.exe")
+    if os.path.exists(cached):
+        _plink_path_cache["value"] = cached
+        return cached
+    try:
+        import urllib.request
+        server_logger.info("Downloading plink.exe (first use of the Fleet CLI)...")
+        urllib.request.urlretrieve("https://the.earth.li/~sgtatham/putty/latest/w64/plink.exe", cached)
+        _plink_path_cache["value"] = cached
+        return cached
+    except Exception as e:
+        server_logger.error(f"Could not download plink.exe: {e}")
+        return None
+
+@app.route('/api/fleet/machines', methods=['GET'])
+def api_fleet_machines():
+    machines = load_fleet_machines()
+    # Never send password_enc (or a decrypted password) to the browser -
+    # it's only ever decrypted server-side, at the moment a command actually
+    # runs against that machine.
+    return jsonify([{"id": m["id"], "name": m["name"], "ip": m["ip"], "username": m["username"]} for m in machines])
+
+@app.route('/api/fleet/machines/<machine_id>', methods=['POST'])
+def api_fleet_update_machine(machine_id):
+    data = request.json or {}
+    machines = load_fleet_machines()
+    m = next((x for x in machines if x["id"] == machine_id), None)
+    if not m:
+        return jsonify({"ok": False, "error": "Machine not found"}), 404
+    for field in ("name", "ip", "username"):
+        if field in data and str(data[field]).strip():
+            m[field] = str(data[field]).strip()
+    new_password = data.get("password")
+    if new_password:   # blank = keep the existing password unchanged
+        m["password_enc"] = security.encrypt_value(new_password)
+    save_fleet_machines(machines)
+    return jsonify({"ok": True, "id": m["id"], "name": m["name"], "ip": m["ip"], "username": m["username"]})
+
+def _run_fleet_command(machine, command, plink_path, timeout_sec=25):
+    password = security.decrypt_value(machine.get("password_enc", ""))
+    target = f"{machine['username']}@{machine['ip']}"
+    result = {"id": machine["id"], "name": machine["name"], "ip": machine["ip"]}
+    try:
+        proc = subprocess.run(
+            [plink_path, "-batch", "-ssh", "-pw", password, target, command],
+            capture_output=True, timeout=timeout_sec, creationflags=CREATE_NO_WINDOW
+        )
+        output = proc.stdout.decode("utf-8", errors="replace")
+        err = proc.stderr.decode("utf-8", errors="replace")
+        result["ok"] = proc.returncode == 0
+        result["output"] = output + (("\n" + err) if err else "")
+    except subprocess.TimeoutExpired:
+        result["ok"] = False
+        result["output"] = f"Timed out after {timeout_sec}s (no response from {machine['ip']})."
+    except Exception as e:
+        result["ok"] = False
+        result["output"] = f"Error: {e}"
+    return result
+
+@app.route('/api/fleet/run', methods=['POST'])
+def api_fleet_run():
+    data = request.json or {}
+    machine_ids = data.get("machine_ids") or []
+    command = str(data.get("command") or "").strip()
+    if not machine_ids:
+        return jsonify({"ok": False, "error": "No machines selected"}), 400
+    if not command:
+        return jsonify({"ok": False, "error": "No command entered"}), 400
+
+    plink_path = _resolve_plink()
+    if not plink_path:
+        return jsonify({"ok": False, "error": "plink.exe is not available (no internet access to download it and none found on PATH)"}), 500
+
+    all_machines = {m["id"]: m for m in load_fleet_machines()}
+    targets = [all_machines[mid] for mid in machine_ids if mid in all_machines]
+    if not targets:
+        return jsonify({"ok": False, "error": "Selected machines were not found"}), 400
+
+    server_logger.info(f"Fleet CLI: running on {len(targets)} machine(s) (user: {session.get('user', '')}): {command}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(targets)) as ex:
+        results = list(ex.map(lambda m: _run_fleet_command(m, command, plink_path), targets))
+    return jsonify({"ok": True, "results": results})
 
 def _resolve_run_output_selection(path):
     """Given an output file/folder path from a finished run, return the path to

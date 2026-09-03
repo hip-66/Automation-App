@@ -22,22 +22,26 @@ $ErrorActionPreference = "Continue"   # Don't stop on errors — handle them man
 $WorkingDir = $PSScriptRoot
 if (-not $WorkingDir) { $WorkingDir = (Get-Location).Path }
 
+# Enable TLS 1.2 and SSL bypass for PowerShell web calls to HTTPS iDRAC endpoints
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
+[Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
+
 # ======================================================================
 # USER INPUTS: Collected once at the start
 # ======================================================================
 Write-Host ("=" * 50) -ForegroundColor Cyan
 Write-Host " Nova-HUB Unified iDRAC ATP Report Generator " -ForegroundColor Cyan
 Write-Host ("=" * 50) -ForegroundColor Cyan
-$PO_INPUT = (Read-Host "Please enter PO").Trim()
-$SO_INPUT = (Read-Host "Please enter SO").Trim()
-$SN_INPUT = (Read-Host "Please enter SN").Trim()
+$PO_INPUT = if ($env:PSAUTO_PO_NUMBER) { $env:PSAUTO_PO_NUMBER.Trim() } else { (Read-Host "Please enter PO").Trim() }
+$SO_INPUT = if ($env:PSAUTO_SO_NUMBER) { $env:PSAUTO_SO_NUMBER.Trim() } else { (Read-Host "Please enter SO").Trim() }
+$SN_INPUT = if ($env:PSAUTO_SN_NUMBER) { $env:PSAUTO_SN_NUMBER.Trim() } else { (Read-Host "Please enter SN").Trim() }
 Write-Host ("=" * 50) -ForegroundColor Cyan
 
 # ======================================================================
 # GLOBAL CONFIGURATION & SERVER DEFINITIONS
 # ======================================================================
-$USERNAME = "root"
-$PASSWORD = "admin1234"
+$USERNAME = if ($env:PSAUTO_USERNAME) { $env:PSAUTO_USERNAME } elseif ($env:PSAUTO_DEFAULT_USERNAME) { $env:PSAUTO_DEFAULT_USERNAME } else { "root" }
+$PASSWORD = if ($env:PSAUTO_PASSWORD) { $env:PSAUTO_PASSWORD } elseif ($env:PSAUTO_DEFAULT_PASSWORD) { $env:PSAUTO_DEFAULT_PASSWORD } else { "admin1234" }
 $TEMP_IMG_DIR = Join-Path $WorkingDir "temp_screenshots"
 
 if (-not (Test-Path $TEMP_IMG_DIR)) {
@@ -56,6 +60,24 @@ $SERVERS_10 = [ordered]@{
 $SERVERS_9 = [ordered]@{
     "SRVMGT" = "192.168.80.127"
     "NGINX"  = "192.168.80.128"
+}
+
+# addresses.txt (written by PS Automation next to this script) overrides the
+# hardcoded IPs above BY POSITION - line 1 -> FM1, line 2 -> FM2, ... line 7 ->
+# NGINX - leaving names/order untouched. A standalone run with no
+# addresses.txt present is completely unaffected.
+$AddressesFile = Join-Path $WorkingDir "addresses.txt"
+if (Test-Path $AddressesFile) {
+    $overrideIps = @(Get-Content $AddressesFile | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" })
+    if ($overrideIps.Count -gt 0) {
+        $orderedKeys = @($SERVERS_10.Keys) + @($SERVERS_9.Keys)
+        for ($i = 0; $i -lt [Math]::Min($overrideIps.Count, $orderedKeys.Count); $i++) {
+            $key = $orderedKeys[$i]
+            if ($SERVERS_10.Contains($key)) { $SERVERS_10[$key] = $overrideIps[$i] }
+            else { $SERVERS_9[$key] = $overrideIps[$i] }
+        }
+        Write-Host "Applied $($overrideIps.Count) target IP override(s) from addresses.txt" -ForegroundColor Gray
+    }
 }
 
 # Navigation Paths — Preserved exactly from the Python original
@@ -146,7 +168,7 @@ public class WinAPI {
 function Take-ScreenGrab {
     param([string]$FilePath, [string]$SessionId = $null)
 
-    # --- Primary: GDI+ desktop capture (captures entire screen including CMD window) ---
+    # Primary: GDI+ desktop capture
     try {
         $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
         $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
@@ -160,11 +182,10 @@ function Take-ScreenGrab {
         Write-Host "[WARN] Desktop screenshot failed: $($_.Exception.Message) - trying WebDriver..." -ForegroundColor Yellow
     }
 
-    # --- Fallback: WebDriver screenshot API (browser viewport only) ---
+    # Fallback: WebDriver screenshot API
     if ($SessionId) {
         try {
-            $res = Invoke-RestMethod -Uri "$global:CD_URL/$SessionId/screenshot" `
-                       -Method GET -ContentType "application/json"
+            $res = Invoke-RestMethod -Uri "$global:CD_URL/$SessionId/screenshot" -Method GET -ContentType "application/json"
             $b64 = $res.value
             if ($b64) {
                 [IO.File]::WriteAllBytes($FilePath, [Convert]::FromBase64String($b64))
@@ -177,7 +198,7 @@ function Take-ScreenGrab {
 }
 
 # ======================================================================
-# OS-LEVEL WINDOW MANIPULATION — Faithful port of Python ctypes code
+# OS-LEVEL WINDOW MANIPULATION
 # ======================================================================
 function Get-ScreenDimensions {
     $w = 0; $h = 0
@@ -200,7 +221,7 @@ function Setup-CmdWindow {
         [WinAPI]::SetForegroundWindow($hwnd) | Out-Null     # Bring to front
         Start-Sleep -Seconds 1
 
-        # Apply Ctrl+Minus zoom out via keyboard events (2 times)
+        # Apply Ctrl+Minus zoom out via keyboard events
         $VK_CONTROL = 0x11
         $VK_OEM_MINUS = 0xBD
         for ($i = 0; $i -lt 2; $i++) {
@@ -212,7 +233,7 @@ function Setup-CmdWindow {
             Start-Sleep -Milliseconds 300
         }
 
-        # Position window on the right 1/3 of the screen
+        # Position window on the right side of the screen
         [WinAPI]::SetWindowPos($hwnd, [IntPtr]::Zero, $TargetX, $TargetY, $TargetW, $TargetH, 0x0040) | Out-Null
         Start-Sleep -Seconds 1
 
@@ -224,7 +245,7 @@ function Setup-CmdWindow {
         [WinAPI]::mouse_event(0x0004, 0, 0, 0, 0)   # MOUSEEVENTF_LEFTUP
         Start-Sleep -Milliseconds 500
 
-        # Physical scroll to top via mouse wheel events (15 times)
+        # Physical scroll to top via mouse wheel events
         for ($i = 0; $i -lt 15; $i++) {
             [WinAPI]::mouse_event(0x0800, 0, 0, (120 * 5), 0)   # MOUSEEVENTF_WHEEL
             Start-Sleep -Milliseconds 50
@@ -238,7 +259,7 @@ function Setup-CmdWindow {
 # ======================================================================
 $global:CD_PORT = 9515
 $global:CD_URL  = "http://localhost:$global:CD_PORT/session"
-$ChromeDriverPath = Join-Path $WorkingDir "chromedriver.exe"
+$ChromeDriverPath = if ($env:CHROMEDRIVER_PATH) { $env:CHROMEDRIVER_PATH } else { Join-Path $WorkingDir "chromedriver.exe" }
 
 if (-not (Test-Path $ChromeDriverPath)) {
     Write-Host "[WARNING] chromedriver.exe not found! Browser automation will not work." -ForegroundColor Yellow
@@ -272,17 +293,23 @@ function Invoke-WD {
     return $res.value
 }
 
-# --- Session management ---
+# --- Session management (Fixed automation banner & SSL 500 errors) ---
 function New-WebSession {
     param([int]$BrowserW, [int]$BrowserH)
     $body = @{
         capabilities = @{
             alwaysMatch = @{
                 browserName = "chrome"
+                acceptInsecureCerts = $true
                 "goog:chromeOptions" = @{
+                    excludeSwitches = @("enable-automation")
+                    useAutomationExtension = $false
                     args = @(
                         "--ignore-certificate-errors",
+                        "--ignore-ssl-errors",
+                        "--allow-insecure-localhost",
                         "--disable-infobars",
+                        "--disable-blink-features=AutomationControlled",
                         "--window-position=0,0",
                         "--window-size=$BrowserW,$BrowserH"
                     )
@@ -352,13 +379,11 @@ function Is-ElementVisible {
 
 function Click-Element {
     param($SessionId, [string]$ElementId)
-    # Try standard click first
     try {
         Invoke-RestMethod -Uri "$global:CD_URL/$SessionId/element/$ElementId/click" `
             -Method "POST" -Body "{}" -ContentType "application/json" | Out-Null
         return $true
     } catch {}
-    # Fallback: JS click (expected for many iDRAC menu items — no need to log)
     try {
         $jsBody = @{
             script = "arguments[0].click();"
@@ -373,12 +398,10 @@ function Click-Element {
 
 function Send-ElementKeys {
     param($SessionId, [string]$ElementId, [string]$Text)
-    # Clear first
     try {
         Invoke-RestMethod -Uri "$global:CD_URL/$SessionId/element/$ElementId/clear" `
             -Method "POST" -Body "{}" -ContentType "application/json" | Out-Null
     } catch {}
-    # Send keys
     try {
         Invoke-WD -Uri "$global:CD_URL/$SessionId/element/$ElementId/value" -Method "POST" -Body @{ text = $Text } | Out-Null
         return $true
@@ -406,7 +429,6 @@ function Scroll-IntoView {
 
 function Press-Key {
     param($SessionId, [string]$Key)
-    # W3C Actions API for key presses
     $body = @{
         actions = @(
             @{
@@ -422,7 +444,6 @@ function Press-Key {
     try {
         Invoke-WD -Uri "$global:CD_URL/$SessionId/actions" -Method "POST" -Body $body | Out-Null
     } catch {}
-    # Release actions
     try {
         Invoke-WD -Uri "$global:CD_URL/$SessionId/actions" -Method "DELETE" | Out-Null
     } catch {}
@@ -430,7 +451,6 @@ function Press-Key {
 
 function Press-CtrlMinus {
     param($SessionId)
-    # Ctrl+'-' via W3C Actions
     $body = @{
         actions = @(
             @{
@@ -455,7 +475,6 @@ function Press-CtrlMinus {
 
 function Press-CtrlZero {
     param($SessionId)
-    # Ctrl+'0' via W3C Actions to reset zoom
     $body = @{
         actions = @(
             @{
@@ -503,24 +522,21 @@ function Click-AtPosition {
 }
 
 # ======================================================================
-# SMART CLICK ENGINES — Faithful port of Python logic
+# SMART CLICK ENGINES
 # ======================================================================
-
 function Smart-Click-10 {
     param($SessionId, [string]$StepText, [bool]$IsParent = $false, [string]$Child = $null)
 
-    # If is_parent and child, check if child is already visible
     if ($IsParent -and $Child) {
         $childEls = Find-Elements $SessionId "xpath" "//*[text()='$Child']"
         foreach ($ce in $childEls) {
             $ceId = Get-ElementId $ce
             if ($ceId -and (Is-ElementVisible $SessionId $ceId)) {
-                return $true   # Child already visible, no need to click parent
+                return $true
             }
         }
     }
 
-    # Attempt 1: exact text match, first visible
     $els = Find-Elements $SessionId "xpath" "//*[text()='$StepText']"
     foreach ($e in $els) {
         $eId = Get-ElementId $e
@@ -533,7 +549,6 @@ function Smart-Click-10 {
         }
     }
 
-    # Attempt 2: contains text
     $els2 = Find-Elements $SessionId "xpath" "//*[contains(text(), '$StepText')]"
     foreach ($e in $els2) {
         $eId = Get-ElementId $e
@@ -552,7 +567,6 @@ function Smart-Click-10 {
 function Smart-Click-9 {
     param($SessionId, [string]$StepText)
 
-    # Attempt 1: exact text match
     $els = Find-Elements $SessionId "xpath" "//*[text()='$StepText']"
     foreach ($e in $els) {
         $eId = Get-ElementId $e
@@ -565,7 +579,6 @@ function Smart-Click-9 {
         }
     }
 
-    # Attempt 2: normalize-space
     $els2 = Find-Elements $SessionId "xpath" "//*[normalize-space(text())='$StepText']"
     foreach ($e in $els2) {
         $eId = Get-ElementId $e
@@ -588,7 +601,7 @@ $captured_results = @{}
 for ($i = 0; $i -lt 10; $i++) { $captured_results[$i] = @{} }
 
 # ======================================================================
-# REPORT TIMESTAMP & FILENAME (set early so it's available in finally)
+# REPORT TIMESTAMP & FILENAME
 # ======================================================================
 $timestamp = (Get-Date).ToString("dd-MM-yyyy_HH-mm")
 $ReportFilename = Join-Path $WorkingDir "NovaHUB_ATP_Report_$timestamp.docx"
@@ -600,12 +613,11 @@ $screen = Get-ScreenDimensions
 $screenW = $screen.Width
 $screenH = $screen.Height
 
-# Global Width for all iDRAC generations (2/3 for browser, 1/3 for CMD)
 $global_browser_w = [int]($screenW * 2 / 3)
 $global_cmd_w     = $screenW - $global_browser_w
 
 # ======================================================================
-# CMD INITIALIZATION — Run ONCE for the entire process
+# CMD INITIALIZATION
 # ======================================================================
 $cmd_title = Setup-CmdWindow $global_browser_w 0 $global_cmd_w $screenH
 
@@ -641,7 +653,6 @@ try {
             Set-Url $sid "https://$ip/"
             Start-Sleep -Seconds 5
 
-            # Login — CSS selectors matching the Python original
             $userEl = Find-Element $sid "css selector" "input[name='username'], input[name='user'], #username, #user, #idrac_user" 20000
             if ($userEl) { Send-ElementKeys $sid $userEl $USERNAME | Out-Null }
 
@@ -650,33 +661,27 @@ try {
 
             $loginEl = Find-Element $sid "css selector" "button:has-text('Log In'), button:has-text('Login'), #btn-login" 5000
             if (-not $loginEl) {
-                # Fallback: find by xpath
                 $loginEl = Find-Element $sid "xpath" "//button[contains(.,'Log In')] | //button[contains(.,'Login')] | //*[@id='btn-login']" 5000
             }
             if ($loginEl) { Click-Element $sid $loginEl | Out-Null }
 
             Start-Sleep -Seconds 10
 
-            # Manual Zoom Out — matches Python: click center, then Ctrl+-
             Click-AtPosition $sid ([int]($global_browser_w / 2)) ([int]($screenH / 2))
             Press-CtrlMinus $sid
 
-            # Navigate pages
             for ($idx = 0; $idx -lt $NAV_PAGES_10.Count; $idx++) {
                 $nav = $NAV_PAGES_10[$idx]
                 
-                # Exclude K8S from FM Integrated Devices
                 if ($s_name -match "K8S" -and $nav.name -eq "FM Integrated Devices") { continue }
                 
                 Write-Host "  [PAGE] $($nav.name)" -ForegroundColor DarkGray
 
-                # Click Dashboard to reset state
                 try {
                     $dashEl = Find-Element $sid "xpath" "//*[text()='Dashboard']" 2000
                     if ($dashEl) { Click-Element $sid $dashEl | Out-Null }
                 } catch {}
 
-                # Navigate click path
                 $clickPath = $nav.click_path
                 for ($i = 0; $i -lt $clickPath.Count; $i++) {
                     $step = $clickPath[$i]
@@ -685,23 +690,20 @@ try {
                     Smart-Click-10 $sid $step ($i -eq 0) $childHint | Out-Null
                 }
 
-                Start-Sleep -Seconds 3   # wait_for_timeout(3000)
+                Start-Sleep -Seconds 3
 
-                # Zoom out for specific pages to capture everything
                 $didZoom = $false
                 if ($nav.name -in @("Firmware Inventory", "FM Integrated Devices", "System profiles settings")) {
                     for ($z = 0; $z -lt 4; $z++) { Press-CtrlMinus $sid; Start-Sleep -Milliseconds 300 }
                     $didZoom = $true
                 }
 
-                # Screenshot (via WebDriver API — works in RDP/headless)
                 $imgPath = Join-Path $TEMP_IMG_DIR "10_${s_name}_${idx}.png"
                 Take-ScreenGrab $imgPath $sid
                 $captured_results[$idx][$s_name] = @( $imgPath )
 
                 if ($nav.needs_scroll) {
-                    # PageDown via keyboard  (matches Python: page.keyboard.press("PageDown"))
-                    Press-Key $sid ([string][char]0xE00F)   # PageDown key
+                    Press-Key $sid ([string][char]0xE00F)
                     Start-Sleep -Milliseconds 2500
                     $imgSc = Join-Path $TEMP_IMG_DIR "10_${s_name}_${idx}_sc.png"
                     Take-ScreenGrab $imgSc $sid
@@ -743,11 +745,9 @@ try {
             Set-Url $sid "https://$ip/"
             Start-Sleep -Seconds 5
 
-            # iDRAC 9 login — click then type (matches Python keyboard.type approach)
             $userEl9 = Find-Element $sid "css selector" "input[name='username'], input[name='user'], #username, #user" 20000
             if ($userEl9) {
                 Click-Element $sid $userEl9 | Out-Null
-                # Type character by character with delay (mimics Python keyboard.type with delay=50)
                 Send-ElementKeys $sid $userEl9 $USERNAME | Out-Null
             }
 
@@ -762,15 +762,15 @@ try {
 
             Start-Sleep -Seconds 10
 
-            # Manual Zoom Out for iDRAC 9 — click at (10,10), then Ctrl+- three times
             Click-AtPosition $sid 10 10
             for ($z = 0; $z -lt 3; $z++) {
                 Press-CtrlMinus $sid
-                Start-Sleep -Millise            # Navigate pages
+                Start-Sleep -Milliseconds 300
+            }
+
             for ($idx = 0; $idx -lt $NAV_PAGES_9.Count; $idx++) {
                 $nav = $NAV_PAGES_9[$idx]
                 
-                # Exclude NGINX and SRVMGT from Virtual Disks
                 if ($s_name -in @("NGINX", "SRVMGT") -and $nav.name -eq "Virtual Disks") { continue }
                 
                 Write-Host "  [PAGE] $($nav.name)" -ForegroundColor DarkGray
@@ -789,22 +789,19 @@ try {
                     Smart-Click-9 $sid $step | Out-Null
                 }
 
-                Start-Sleep -Seconds 3   # wait_for_timeout(3000)
+                Start-Sleep -Seconds 3
 
-                # Zoom out for specific pages to capture everything in one shot
                 $didZoom = $false
                 if ($nav.name -in @("Firmware Inventory", "Processor Settings", "Boot Settings", "System Profile Settings")) {
                     for ($z = 0; $z -lt 4; $z++) { Press-CtrlMinus $sid; Start-Sleep -Milliseconds 300 }
                     $didZoom = $true
                 }
 
-                # Screenshot (via WebDriver API — works in RDP/headless)
                 $imgPath = Join-Path $TEMP_IMG_DIR "9_${s_name}_${idx}.png"
                 Take-ScreenGrab $imgPath $sid
                 $captured_results[$idx][$s_name] = @( $imgPath )
 
                 if ($nav.needs_double_pic) {
-                    # Scroll via JS: window.scrollBy(0, 1000) — exactly like Python
                     Invoke-JS $sid "window.scrollBy(0, 1000);" | Out-Null
                     Start-Sleep -Milliseconds 1500
                     $imgSc = Join-Path $TEMP_IMG_DIR "9_${s_name}_${idx}_sc.png"
@@ -817,7 +814,6 @@ try {
                     Start-Sleep -Milliseconds 500
                 }
             }
-        }
         } catch {
             Write-Host "[ERROR] $s_name`: $($_.Exception.Message)" -ForegroundColor Red
         } finally {
@@ -827,13 +823,12 @@ try {
 
 } finally {
     # ======================================================================
-    # ALWAYS RUNS — even on Ctrl+C or error
+    # ALWAYS RUNS
     # ======================================================================
     Stop-ChromeDriver
 
     # ==================================================================
-    # DOCUMENT COMPILATION — Pure PowerShell DOCX (No Word COM needed)
-    # Uses System.IO.Compression — works on ANY Windows machine
+    # DOCUMENT COMPILATION — Pure PowerShell DOCX
     # ==================================================================
     Write-Host "`n>>> Building Unified Word Document..." -ForegroundColor Green
 
@@ -841,12 +836,10 @@ try {
         Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-        # ---- Collect all images and build relationships ----
         $allOrderedServers = @($SERVERS_10.Keys) + @($SERVERS_9.Keys)
-        $imageEntries = @()   # list of @{ relId; fileName; absPath }
+        $imageEntries = @()
         $imgCounter = 1
 
-        # Pre-scan to build image list
         for ($idx = 0; $idx -lt 10; $idx++) {
             foreach ($sName in $allOrderedServers) {
                 if ($captured_results[$idx].ContainsKey($sName)) {
@@ -867,13 +860,10 @@ try {
             }
         }
 
-        # ---- Build document.xml body ----
         $bodyXml = ""
 
-        # Title: Heading 1
         $bodyXml += '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Nova-HUB iDRAC ATP Report</w:t></w:r></w:p>' + "`n"
 
-        # Info table (3 rows x 2 cols) — escape user inputs for XML safety
         $ePO = [System.Security.SecurityElement]::Escape($PO_INPUT)
         $eSO = [System.Security.SecurityElement]::Escape($SO_INPUT)
         $eSN = [System.Security.SecurityElement]::Escape($SN_INPUT)
@@ -895,16 +885,13 @@ try {
         $bodyXml += "  <w:tr><w:tc><w:p><w:r><w:t>SN</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>$eSN</w:t></w:r></w:p></w:tc></w:tr>`n"
         $bodyXml += "</w:tbl>`n<w:p/>`n"
 
-        # ---- PAGE BREAK after title page ----
         $bodyXml += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' + "`n"
 
-        # ---- Build image lookup ----
         $imgLookup = @{}
         foreach ($ie in $imageEntries) {
             $imgLookup["$($ie.idx)|$($ie.sName)|$($ie.iPath)"] = $ie.relId
         }
 
-        # ---- Helper: generate image XML with given EMU dimensions ----
         function Get-ImageXml([string]$rId, [int]$wEmu, [int]$hEmu, [int]$picId) {
             $xml  = "<w:p><w:r>`n"
             $xml += "  <w:drawing>`n"
@@ -932,7 +919,6 @@ try {
             return $xml
         }
 
-        # ---- Build flat ordered list of all images with metadata ----
         $allImages = [System.Collections.ArrayList]::new()
         for ($idx = 0; $idx -lt 10; $idx++) {
             foreach ($sName in $allOrderedServers) {
@@ -954,8 +940,6 @@ try {
             }
         }
 
-        # ---- Generate pages: each section heading on new page, 2 images per page ----
-        # Image sizing: max 7.5 inches wide (6858000 EMU), max ~4 inches tall (3657600 EMU)
         $maxW_emu = 6858000
         $maxH_emu = 3657600
         $lastIdx = -1
@@ -968,10 +952,8 @@ try {
             $curPath = $imgItem.iPath
             $curRId  = $imgItem.relId
 
-            # --- New section? Start a new page with heading ---
             if ($curIdx -ne $lastIdx) {
                 if ($lastIdx -ge 0) {
-                    # Page break before new section
                     $bodyXml += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' + "`n"
                 }
                 $testTitle = [System.Security.SecurityElement]::Escape($NAV_PAGES_10[$curIdx].name)
@@ -980,16 +962,13 @@ try {
                 $imagesOnPage = 0
             }
 
-            # --- Need page break for 3rd+ image on same page? ---
             if ($imagesOnPage -ge 2) {
                 $bodyXml += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' + "`n"
                 $imagesOnPage = 0
             }
 
-            # --- Bold server name title above image ---
             $bodyXml += "<w:p><w:pPr><w:spacing w:before=`"60`" w:after=`"40`"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>${curName}:</w:t></w:r></w:p>`n"
 
-            # --- Get image dimensions and scale to fit 2-per-page ---
             try {
                 $img = [System.Drawing.Image]::FromFile((Resolve-Path $curPath).Path)
                 $origW = $img.Width
@@ -1011,7 +990,6 @@ try {
             $imagesOnPage++
         }
 
-        # ---- Assemble full document.xml ----
         $docHeader = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
@@ -1042,7 +1020,6 @@ try {
 '@
         $documentXml = $docHeader + "`n" + $bodyXml + $docFooter
 
-        # ---- Build relationships XML ----
         $relsXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -1054,7 +1031,6 @@ try {
         }
         $relsXml += "</Relationships>"
 
-        # ---- Styles XML (defines Heading1, Heading2, TableGrid) ----
         $stylesXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -1084,7 +1060,6 @@ try {
 </w:styles>
 '@
 
-        # ---- Content Types XML ----
         $contentTypesXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -1096,7 +1071,6 @@ try {
 </Types>
 '@
 
-        # ---- Root relationships ----
         $rootRelsXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -1104,13 +1078,11 @@ try {
 </Relationships>
 '@
 
-        # ---- Write everything into ZIP / DOCX ----
         if (Test-Path $ReportFilename) { Remove-Item $ReportFilename -Force }
 
         $zipStream = [System.IO.File]::Create($ReportFilename)
         $zip = New-Object System.IO.Compression.ZipArchive($zipStream, [System.IO.Compression.ZipArchiveMode]::Create)
 
-        # Helper: add text entry to ZIP
         function Add-ZipText([System.IO.Compression.ZipArchive]$z, [string]$entryName, [string]$text) {
             $entry = $z.CreateEntry($entryName)
             $sw = New-Object System.IO.StreamWriter($entry.Open())
@@ -1124,7 +1096,6 @@ try {
         Add-ZipText $zip "word/styles.xml"               $stylesXml
         Add-ZipText $zip "word/_rels/document.xml.rels"  $relsXml
 
-        # Add image files
         foreach ($ie in $imageEntries) {
             $imgEntry = $zip.CreateEntry("word/media/$($ie.fileName)")
             $imgStream = $imgEntry.Open()
@@ -1142,12 +1113,10 @@ try {
         Write-Host "[ERROR] Failed to save Word Document: $($_.Exception.Message)" -ForegroundColor Red
     }
 
-    # Kill the CMD window we opened (matches Python: taskkill)
     if ($cmd_title) {
         & cmd.exe /c "taskkill /F /FI `"WINDOWTITLE eq $cmd_title*`" >nul 2>&1"
     }
 
-    # Cleanup temp screenshots directory
     if (Test-Path $TEMP_IMG_DIR) {
         Remove-Item -Path $TEMP_IMG_DIR -Recurse -Force -ErrorAction SilentlyContinue
     }

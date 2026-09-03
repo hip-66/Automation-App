@@ -54,8 +54,14 @@ from docx import Document
 from docx.shared import RGBColor
 
 RACADM_PATH = r"C:\Program Files\Dell\SysMgt\iDRACTools\racadm\racadm.exe"
-USERNAME = "root"
-PASSWORD = "admin1234"
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# PSAUTO_USERNAME/PASSWORD (explicit override from the app's UI) wins; otherwise
+# PSAUTO_DEFAULT_USERNAME/PASSWORD (the app's encrypted default iDRAC creds) is
+# used; a standalone run with neither set keeps the original hardcoded creds.
+USERNAME = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip() or "root"
+PASSWORD = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "") or "admin1234"
 
 SERVERS = {
     "FM1": {"ip": "192.168.80.122", "role": "FM", "type": "R470"},
@@ -66,6 +72,22 @@ SERVERS = {
     "SRVMGT": {"ip": "192.168.80.127", "role": "SRVMGT", "type": "R260"},
     "NGINX": {"ip": "192.168.80.128", "role": "NGINX", "type": "R260"}
 }
+
+# If PS Automation wrote an addresses.txt next to this script (one target per
+# line), override the hardcoded IPs above by position - line 1 -> FM1, line 2
+# -> FM2, line 3 -> PMC1, ... in the same order as SERVERS above. Name/role/
+# type (which pick the firmware/BIOS targets checked below) stay exactly as
+# hardcoded; only the IP actually dialed is swapped in. Fewer lines than
+# servers leaves the remaining ones on their hardcoded IP; a standalone run
+# with no addresses.txt keeps every hardcoded IP untouched.
+_addresses_path = os.path.join(SCRIPT_DIR, "addresses.txt")
+if os.path.exists(_addresses_path):
+    with open(_addresses_path, "r", encoding="utf-8", errors="ignore") as _f:
+        _addr_override = [line.strip() for line in _f if line.strip()]
+    if _addr_override:
+        print(f"[i] addresses.txt found - overriding {min(len(_addr_override), len(SERVERS))} of {len(SERVERS)} server IP(s) (order: {', '.join(SERVERS.keys())})")
+        for _name, _ip in zip(SERVERS.keys(), _addr_override):
+            SERVERS[_name]["ip"] = _ip
 
 FW_TYPES = {
     "R470_FM": [
@@ -585,9 +607,10 @@ def create_report(all_data):
                             paragraph.runs[0].font.color.rgb = RGBColor(255, 0, 0) 
                             
     filename = f"iDrac_Racadm_Audit_Report_{datetime.datetime.now().strftime('%d_%m_%Y_%H%M%S')}.docx"
-    doc.save(filename) 
-    print(f"\n[COMPLETED] Validated execution procedures logic variables arrays layouts mappings generation completed. File created: {filename}")
-    return filename 
+    filepath = os.path.join(SCRIPT_DIR, filename)
+    doc.save(filepath)
+    print(f"\n[COMPLETED] Validated execution procedures logic variables arrays layouts mappings generation completed. File created: {filepath}")
+    return filepath
 
 if __name__ == "__main__":
     audit_data = {} 

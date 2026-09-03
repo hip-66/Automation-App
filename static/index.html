@@ -47,6 +47,9 @@
             <button id="nav-scheduling" class="side-nav-item" data-page="scheduling">
                 <span class="ico">🕒</span><span class="nav-item-label" id="nav-scheduling-text">תזמון</span>
             </button>
+            <button id="nav-guides" class="side-nav-item" data-page="guides">
+                <span class="ico">📚</span><span class="nav-item-label" id="nav-guides-text">מדריכים</span>
+            </button>
             <div class="nav-group-label" id="ng-results">תוצאות</div>
             <button id="nav-reports" class="side-nav-item" data-page="reports">
                 <span class="ico">📄</span><span class="nav-item-label" id="nav-reports-text">דוחות</span>
@@ -370,6 +373,63 @@
                 </div>
             </div>
 
+            <!-- ============================ PAGE: LINKFLEX FLEET ============================ -->
+            <div id="page-fleet" class="page-view" style="display:none;">
+                <div class="page-head">
+                    <div><h1 id="fleet-page-title">LinkFlex Fleet</h1><p id="fleet-page-subtitle"></p></div>
+                    <div class="spacer"></div>
+                    <button class="btn" id="fleet-back-btn">← <span id="fleet-btn-back-text"></span></button>
+                </div>
+
+                <div class="card" style="margin-bottom:16px;">
+                    <div class="tbl-wrap">
+                        <table class="reports-list-table" id="fleet-machines-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px;"></th>
+                                    <th id="fleet-col-name"></th>
+                                    <th id="fleet-col-ip"></th>
+                                    <th id="fleet-col-username"></th>
+                                    <th id="fleet-col-password"></th>
+                                    <th style="width:70px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="fleet-machines-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="page-head">
+                    <button id="fleet-connect-btn" class="btn btn-primary" disabled></button>
+                    <span id="fleet-selected-count" class="form-help"></span>
+                </div>
+
+                <div id="fleet-cli-section" class="card" style="display:none;">
+                    <div id="fleet-cli-targets" class="fleet-cli-targets"></div>
+                    <div class="fleet-cli-input-row">
+                        <input type="text" id="fleet-cli-command" class="form-control" autocomplete="off">
+                        <button id="fleet-cli-run-btn" class="btn btn-primary"></button>
+                    </div>
+                    <div id="fleet-cli-results" class="fleet-cli-results"></div>
+                </div>
+            </div>
+
+            <!-- ============================ PAGE: GUIDES ============================ -->
+            <div id="page-guides" class="page-view" style="display:none;">
+                <div class="page-head">
+                    <div><h1 id="guides-page-title">מדריכים</h1><p id="guides-page-subtitle"></p></div>
+                    <div class="spacer"></div>
+                </div>
+
+                <div class="guide-platform-tabs" id="guide-platform-tabs"></div>
+
+                <div class="guide-search-row">
+                    <input type="text" id="guide-search-input" class="form-control" autocomplete="off">
+                </div>
+
+                <div id="guide-accordion" class="guide-accordion"></div>
+            </div>
+
         </main>
     </div>
 
@@ -509,6 +569,23 @@
          sits LEFT in English (LTR) and RIGHT in Hebrew (RTL) automatically. -->
     <div id="job-tray" class="job-tray" aria-live="polite" style="display:none;"></div>
 
+    <!-- In-browser .docx/.xlsx preview: the fallback when a machine has no
+         Word/Excel installed (see get_office_availability() in server.py) -
+         used for both generated reports and Guides documents. -->
+    <div id="file-preview-overlay" class="file-preview-overlay" style="display:none;">
+        <div class="file-preview-modal">
+            <div class="file-preview-header">
+                <span id="file-preview-title" class="file-preview-title"></span>
+                <button id="file-preview-close-btn" class="file-preview-close" aria-label="Close">&times;</button>
+            </div>
+            <div id="file-preview-body" class="file-preview-body"></div>
+        </div>
+    </div>
+
+    <!-- Vendored (not CDN) so the fallback itself keeps working on a machine
+         with no internet access, not just no Office. -->
+    <script src="vendor/mammoth.browser.min.js"></script>
+    <script src="vendor/xlsx.full.min.js"></script>
     <script src="app.js?v=3.0.0"></script>
 </body>
 </html>

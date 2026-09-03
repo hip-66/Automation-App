@@ -5,17 +5,21 @@
 Write-Host "=== STARTING SCRIPT ===" -ForegroundColor Cyan
 
 # =========================
-# Desktop Path
+# Template / Output Paths
 # =========================
-$desktop = [Environment]::GetFolderPath("Desktop")
-$templatePath = "$desktop\Hub_Anti_Virus_Fill_Word.docx"
-$outputPath   = "$desktop\Hub_Anti_Virus_Output.docx"
+# Template lives next to this script (not Desktop), so it's found regardless
+# of who runs it or from where. Output still defaults to Desktop for a
+# standalone run, but honors $env:PSAUTO_RUN_OUTPUT_DIR when the app supplies one.
+$ScriptDir = $PSScriptRoot
+$templatePath = Join-Path $ScriptDir "Hub_Anti_Virus_Fill_Word.docx"
+$outputDir = if ($env:PSAUTO_RUN_OUTPUT_DIR) { $env:PSAUTO_RUN_OUTPUT_DIR } else { [Environment]::GetFolderPath("Desktop") }
+$outputPath = Join-Path $outputDir "Hub_Anti_Virus_Output.docx"
 
 # =========================
 # Check Word template exists
 # =========================
 if (!(Test-Path $templatePath)) {
-    Write-Host "❌ ERROR: Word template not found on Desktop!" -ForegroundColor Red
+    Write-Host "❌ ERROR: Word template not found next to the script ($templatePath)!" -ForegroundColor Red
     exit
 }
 
@@ -57,7 +61,15 @@ foreach ($device in $servers.Keys) {
 # =========================
 # Credentials
 # =========================
-$cred = Get-Credential
+# Prefer the app-supplied credentials (headless run); fall back to the
+# original interactive Get-Credential popup for a standalone/manual run.
+$cred = if ($env:PSAUTO_USERNAME -and $env:PSAUTO_PASSWORD) {
+    $securePass = ConvertTo-SecureString $env:PSAUTO_PASSWORD -AsPlainText -Force
+    New-Object System.Management.Automation.PSCredential ($env:PSAUTO_USERNAME, $securePass)
+}
+else {
+    Get-Credential
+}
 
 # =========================
 # Collect Data Function
@@ -160,4 +172,4 @@ $doc.SaveAs([ref]$outputPath)
 $doc.Close()
 $word.Quit()
 
-Write-Host "`n✅ SUCCESS: File created on Desktop!" -ForegroundColor Green
+Write-Host "`n✅ SUCCESS: File created at $outputPath" -ForegroundColor Green

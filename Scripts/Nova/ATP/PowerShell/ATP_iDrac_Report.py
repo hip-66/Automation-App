@@ -24,9 +24,12 @@ print("="*50)
 print(" Nova-HUB Unified iDRAC ATP Report Generator ")
 print("="*50)
 # metadata for the Word document table
-PO_INPUT = input("Please enter PO: ").strip()  # Purchase Order Number
-SO_INPUT = input("Please enter SO: ").strip()  # Sales Order Number
-SN_INPUT = input("Please enter SN: ").strip()  # System Serial Number
+# PS Automation passes these as PSAUTO_PO_NUMBER / PSAUTO_SO_NUMBER /
+# PSAUTO_SN_NUMBER (form fields: po_number / so_number / sn_number); a
+# standalone run with none of those set falls back to the original prompts.
+PO_INPUT = os.environ.get("PSAUTO_PO_NUMBER", "").strip() or input("Please enter PO: ").strip()  # Purchase Order Number
+SO_INPUT = os.environ.get("PSAUTO_SO_NUMBER", "").strip() or input("Please enter SO: ").strip()  # Sales Order Number
+SN_INPUT = os.environ.get("PSAUTO_SN_NUMBER", "").strip() or input("Please enter SN: ").strip()  # System Serial Number
 print("="*50)
 
 # ==============================================================================
@@ -57,18 +60,50 @@ from playwright.sync_api import sync_playwright
 from PIL import ImageGrab
 
 # ==============================================================================
+# PLAYWRIGHT BROWSER CHECK: first-run-only install of the Chromium binary
+# ==============================================================================
+def ensure_playwright_chromium():
+    """ Checks whether Playwright's Chromium browser is already installed and
+    runs 'playwright install chromium' if not. Wrapped so an already-installed
+    browser (every run after the first) is a no-op, and a failed/offline
+    install never blocks a normal run - this script drives Chrome itself via
+    channel="chrome", so a missing bundled Chromium binary isn't fatal. """
+    try:
+        with sync_playwright() as p:
+            exe_path = p.chromium.executable_path
+        if exe_path and os.path.exists(exe_path):
+            return
+    except Exception:
+        pass
+    print("[INFO] Playwright Chromium browser not found - installing (first run only)...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+    except Exception as e:
+        print(f"[WARNING] Playwright Chromium install skipped/failed: {e}")
+
+ensure_playwright_chromium()
+
+# ==============================================================================
 # GLOBAL CONFIGURATION & SERVER DEFINITIONS
 # ==============================================================================
-USERNAME = "root"
-PASSWORD = "admin1234"
-TEMP_IMG_DIR = "temp_screenshots" # Directory for temporary image storage
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Credentials: explicit PSAUTO_USERNAME/PSAUTO_PASSWORD override (from the
+# app's UI) win; otherwise PSAUTO_DEFAULT_USERNAME/PSAUTO_DEFAULT_PASSWORD
+# (the app's configured iDRAC default) is used; a standalone run with neither
+# set falls back to the original hardcoded credentials below.
+USERNAME = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip() or "root"
+PASSWORD = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "") or "admin1234"
+TEMP_IMG_DIR = os.path.join(SCRIPT_DIR, "temp_screenshots") # Directory for temporary image storage (resolved next to the script, not the CWD)
 
 # Ensure the temp directory exists
 if not os.path.exists(TEMP_IMG_DIR):
     os.makedirs(TEMP_IMG_DIR)
 
 # Targeted Servers - Grouped by Generation
-SERVERS_10 = {
+# Standalone (double-click) run default - used only when addresses.txt (see
+# below) doesn't exist or is empty.
+HARDCODED_SERVERS_10 = {
     "FM1": "192.168.80.122",
     "FM2": "192.168.80.123",
     "PMC1": "192.168.80.124",
@@ -76,10 +111,47 @@ SERVERS_10 = {
     "PMC3": "192.168.80.126"
 }
 
-SERVERS_9 = {
+HARDCODED_SERVERS_9 = {
     "SRVMGT": "192.168.80.127",
     "NGINX": "192.168.80.128"
 }
+
+def load_servers_from_addresses_file():
+    """ PS Automation drops an "addresses.txt" file next to this script
+    before launching it (one target per line). Since iDRAC 9 and iDRAC 10
+    need different navigation flows that can't be inferred from the IP alone,
+    each line may be either a bare "IP" (assumed iDRAC 10, name = the IP
+    itself) or "Name,IP[,Gen]" (Gen = "9" or "10", default "10" when omitted).
+    Returns None if the file doesn't exist/has no usable lines, so the caller
+    falls back to the HARDCODED_SERVERS_10/9 dicts above (standalone run). """
+    path = os.path.join(SCRIPT_DIR, "addresses.txt")
+    if not os.path.isfile(path):
+        return None
+    servers_10, servers_9 = {}, {}
+    with open(path, "r", encoding="utf-8") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 2 and parts[1]:
+                name, ip = parts[0], parts[1]
+            else:
+                name = ip = parts[0]
+            gen = parts[2].strip() if len(parts) >= 3 and parts[2].strip() else "10"
+            if gen == "9":
+                servers_9[name] = ip
+            else:
+                servers_10[name] = ip
+    if not servers_10 and not servers_9:
+        return None
+    return servers_10, servers_9
+
+_loaded_servers = load_servers_from_addresses_file()
+if _loaded_servers is not None:
+    SERVERS_10, SERVERS_9 = _loaded_servers
+else:
+    SERVERS_10, SERVERS_9 = HARDCODED_SERVERS_10, HARDCODED_SERVERS_9
 
 # Navigation Paths: Preserved exactly from original source files
 NAV_PAGES_10 = [
@@ -213,6 +285,13 @@ def run_automation():
     """ Orchestrates the connection, navigation, and document building. """
     timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
     report_filename = f"NovaHUB_ATP_Report_{timestamp}.docx"
+    # PS Automation tells us exactly where this run's output belongs via
+    # PSAUTO_RUN_OUTPUT_DIR; a standalone run (that variable unset) saves next
+    # to the script itself instead of whatever the current working directory
+    # happens to be.
+    output_dir = os.environ.get("PSAUTO_RUN_OUTPUT_DIR", "").strip() or SCRIPT_DIR
+    os.makedirs(output_dir, exist_ok=True)
+    report_path = os.path.join(output_dir, report_filename)
     screen_w, screen_h = get_screen_dimensions()
     
     # Unified results data structure: results[test_index][server_name] = [images]
@@ -340,8 +419,8 @@ def run_automation():
 
         # Save and Cleanup
         try:
-            doc.save(report_filename)
-            print(f"\n[SUCCESS] Final Report saved: {report_filename}")
+            doc.save(report_path)
+            print(f"\n[SUCCESS] Final Report saved: {report_path}")
         except:
             print(f"\n[ERROR] Failed to save document.")
             

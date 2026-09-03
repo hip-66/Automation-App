@@ -81,7 +81,11 @@ document.addEventListener("DOMContentLoaded", () => {
         let dark = "כהה", light = "בהיר";
         try { const tr = t(); if (tr) { dark = tr.theme_dark || dark; light = tr.theme_light || light; } } catch (e) {}
         document.querySelectorAll("#theme-toggle").forEach(btn => {
-            btn.textContent = isDark ? ("🌙 " + dark) : ("☀️ " + light);
+            // Shows the mode clicking will switch TO (not the current one) -
+            // otherwise clicking a button labeled "Dark" while already in
+            // dark mode looks like it should stay dark, but actually flips
+            // you to light.
+            btn.textContent = isDark ? ("☀️ " + light) : ("🌙 " + dark);
         });
     }
 
@@ -254,6 +258,40 @@ document.addEventListener("DOMContentLoaded", () => {
             nav_files: "פלטים",
             logs_page_title: "לוגים - היסטוריית הרצות",
             files_page_title: "פלטים - קבצים שנוצרו",
+            fleet_catalog_name: "LinkFlex Fleet - חיבור מרוכז למכונות",
+            fleet_catalog_desc: "התחברות מקבילית דרך SSH לכל מכונות ה-LinkFlex, עם הרצת פקודה אחת על כל המכונות שנבחרו במקביל",
+            fleet_page_title: "LinkFlex Fleet - ניהול מכונות",
+            fleet_page_subtitle: "סמן וי על המכונות הרצויות, התחבר, והרץ פקודה על כולן במקביל",
+            fleet_col_name: "שם",
+            fleet_col_ip: "כתובת IP",
+            fleet_col_username: "שם משתמש",
+            fleet_col_password: "סיסמה",
+            fleet_password_placeholder: "(ללא שינוי)",
+            fleet_save: "שמור",
+            fleet_saved: "נשמר בהצלחה",
+            fleet_save_failed: "שמירה נכשלה",
+            fleet_connect: "התחבר למכונות שנבחרו",
+            fleet_selected_suffix: "מכונות נבחרו",
+            fleet_cli_run: "הרץ",
+            fleet_cli_placeholder: "הקלד פקודה להרצה על כל המכונות המחוברות...",
+            fleet_running: "מריץ פקודה על המכונות שנבחרו...",
+            fleet_run_failed: "הרצת הפקודה נכשלה",
+            nav_guides: "מדריכים",
+            guides_page_title: "מדריכים",
+            guides_page_subtitle: "עיינו במדריכי ההפעלה הרשמיים של כל פלטפורמה, לפי נושא וגרסה",
+            guides_search_placeholder: "חיפוש מדריך...",
+            guides_platform_nova: "NOVA",
+            guides_platform_cognyte: "Cognyte",
+            guides_platform_applied: "Applied",
+            guides_group_other: "כללי",
+            guides_no_results: "לא נמצאו מדריכים התואמים את החיפוש",
+            guides_empty_platform: "אין עדיין מדריכים זמינים עבור הפלטפורמה הזו",
+            guides_view: "צפה",
+            guides_copy_path_tip: "העתק נתיב קובץ",
+            guides_copied_toast: "הנתיב הועתק ללוח",
+            guides_copy_failed: "העתקת הנתיב נכשלה",
+            guides_size_unit_kb: "KB",
+            guides_size_unit_mb: "MB",
             btn_open_logs_folder: "פתח תיקיית Logs",
             btn_open_output_folder: "פתח תיקיית פלטים",
             btn_goto_logs: "עבור ללוגים",
@@ -313,6 +351,22 @@ document.addEventListener("DOMContentLoaded", () => {
             toast_profile_saved: "פרופיל הפקודות נשמר",
             toast_file_opened: "הקובץ נפתח בהצלחה",
             toast_run_again_loaded: "הטופס מולא מהרצה קודמת - ערוך במידת הצורך ולחץ הרץ",
+            preview_loading: "טוען תצוגה מקדימה...",
+            preview_empty: "אין תוכן להצגה",
+            preview_failed: "טעינת התצוגה המקדימה נכשלה",
+            linkflex_prox_url: "Proxmox - כתובת URL:",
+            linkflex_prox_user: "Proxmox - שם משתמש:",
+            linkflex_prox_pass: "Proxmox - סיסמה:",
+            linkflex_idrac_user: "iDRAC - שם משתמש:",
+            linkflex_idrac_pass: "iDRAC - סיסמה:",
+            linkflex_idrac_servers: "iDRAC - שרתים לעדכון:",
+            linkflex_idrac_servers_hint: "סמן כל שרת שברצונך לעדכן, והכנס את כתובת ה-IP של ה-iDRAC שלו (לכל שרת כתובת משלו) - אפשר לסמן אחד, כמה, או את כולם",
+            linkflex_firewall_file: "דוח Firewall (קובץ ATP_LinkFlex_Firewall...txt):",
+            linkflex_firewall_hint: "אופציונלי - אם לא יועלה קובץ, שדות ה-MAC/מספר סידורי של ה-Firewall יישארו ללא עדכון",
+            browse_button: "עיון...",
+            no_file_selected: "לא נבחר קובץ",
+            uploading_file: "מעלה...",
+            upload_failed: "העלאת הקובץ נכשלה",
             mode_label: "שיטת הזנת שרתים (IP Mode):",
             mode_range: "טווח כתובות (Sequence)",
             mode_list: "רשימת כתובות ידנית (Custom List)",
@@ -463,8 +517,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 network: "רשת",
                 validation: "בדיקות ואימות",
                 redhat_validation: "אימות RedHat",
+                netapp: "NetApp",
                 windows: "Windows",
                 general: "כללי"
+            },
+            generic_field_labels: {
+                po_number: "מספר הזמנת רכש (PO)",
+                so_number: "מספר הזמנת מכירה (SO)",
+                sn_number: "מספר סידורי (SN)",
+                targets: "שרתי יעד (שם לכל שורה)",
+                fw_base_dir: "תיקיית קבצי הקושחה (נתיב)",
+                firmware_targets: "שרתי יעד לעדכון (שם/קוד לכל שורה, או ALL לכולם)",
+                firmware_base_dir: "תיקיית קבצי הקושחה (נתיב)",
+                idrac_user: "iDRAC - שם משתמש",
+                idrac_pass: "iDRAC - סיסמה"
             },
             dash_risk_count_suffix: "אוטומציות",
             dash_risk_caption: "קטגוריות הסיכון קובעות את רמת האישור לפני ההרצה.",
@@ -613,6 +679,40 @@ document.addEventListener("DOMContentLoaded", () => {
             nav_files: "Outputs",
             logs_page_title: "Logs - Run History",
             files_page_title: "Outputs - Generated Files",
+            fleet_catalog_name: "LinkFlex Fleet - Centralized Machine Connection",
+            fleet_catalog_desc: "Parallel SSH connection to all LinkFlex machines, running one command on every selected machine at once",
+            fleet_page_title: "LinkFlex Fleet - Machine Management",
+            fleet_page_subtitle: "Check the machines you want, connect, then run a command on all of them in parallel",
+            fleet_col_name: "Name",
+            fleet_col_ip: "IP Address",
+            fleet_col_username: "Username",
+            fleet_col_password: "Password",
+            fleet_password_placeholder: "(unchanged)",
+            fleet_save: "Save",
+            fleet_saved: "Saved successfully",
+            fleet_save_failed: "Save failed",
+            fleet_connect: "Connect to Selected Machines",
+            fleet_selected_suffix: "machines selected",
+            fleet_cli_run: "Run",
+            fleet_cli_placeholder: "Type a command to run on all connected machines...",
+            fleet_running: "Running command on selected machines...",
+            fleet_run_failed: "Command execution failed",
+            nav_guides: "Guides",
+            guides_page_title: "Guides",
+            guides_page_subtitle: "Browse the official runbooks for each platform, grouped by topic and revision",
+            guides_search_placeholder: "Search guides...",
+            guides_platform_nova: "NOVA",
+            guides_platform_cognyte: "Cognyte",
+            guides_platform_applied: "Applied",
+            guides_group_other: "General",
+            guides_no_results: "No guides match your search",
+            guides_empty_platform: "No guides are available for this platform yet",
+            guides_view: "View",
+            guides_copy_path_tip: "Copy file path",
+            guides_copied_toast: "Path copied to clipboard",
+            guides_copy_failed: "Failed to copy path",
+            guides_size_unit_kb: "KB",
+            guides_size_unit_mb: "MB",
             btn_open_logs_folder: "Open Logs Folder",
             btn_open_output_folder: "Open Outputs Folder",
             btn_goto_logs: "Go to Logs",
@@ -672,6 +772,22 @@ document.addEventListener("DOMContentLoaded", () => {
             toast_profile_saved: "Command profile saved",
             toast_file_opened: "File opened successfully",
             toast_run_again_loaded: "Form filled from a previous run - edit if needed and click Run",
+            preview_loading: "Loading preview...",
+            preview_empty: "No content to display",
+            preview_failed: "Failed to load preview",
+            linkflex_prox_url: "Proxmox - URL:",
+            linkflex_prox_user: "Proxmox - Username:",
+            linkflex_prox_pass: "Proxmox - Password:",
+            linkflex_idrac_user: "iDRAC - Username:",
+            linkflex_idrac_pass: "iDRAC - Password:",
+            linkflex_idrac_servers: "iDRAC - Servers to update:",
+            linkflex_idrac_servers_hint: "Check each server you want to update, and enter its iDRAC IP address (each server has its own) - check one, several, or all three",
+            linkflex_firewall_file: "Firewall report (ATP_LinkFlex_Firewall...txt file):",
+            linkflex_firewall_hint: "Optional - if no file is uploaded, the Firewall MAC/serial fields will be left unupdated",
+            browse_button: "Browse...",
+            no_file_selected: "No file selected",
+            uploading_file: "Uploading...",
+            upload_failed: "File upload failed",
             mode_label: "Server Input Method (IP Mode):",
             mode_range: "IP Range (Sequence)",
             mode_list: "Manual IP List (Custom List)",
@@ -822,8 +938,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 network: "Network",
                 validation: "Validation",
                 redhat_validation: "RedHat Validation",
+                netapp: "NetApp",
                 windows: "Windows",
                 general: "General"
+            },
+            generic_field_labels: {
+                po_number: "PO Number",
+                so_number: "SO Number",
+                sn_number: "Serial Number (SN)",
+                targets: "Target Server(s) (one name per line)",
+                fw_base_dir: "Firmware Files Folder (path)",
+                firmware_targets: "Target Server(s) to Update (one name/code per line, or ALL)",
+                firmware_base_dir: "Firmware Files Folder (path)",
+                idrac_user: "iDRAC - Username",
+                idrac_pass: "iDRAC - Password"
             },
             dash_risk_count_suffix: "automations",
             dash_risk_caption: "Risk categories determine the approval level required before running.",
@@ -1251,6 +1379,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("nav-scheduling-text").textContent = tr.nav_scheduling;
         document.getElementById("nav-reports-text").textContent = tr.nav_reports;
         document.getElementById("nav-logs-text").textContent = tr.nav_logs;
+        document.getElementById("nav-guides-text").textContent = tr.nav_guides;
 
         // Dashboard
         document.getElementById("dash-title").textContent = tr.dash_title;
@@ -1325,6 +1454,24 @@ document.addEventListener("DOMContentLoaded", () => {
         updateBulkDeleteBtn("reports");
         updateBulkDeleteBtn("logs");
 
+        // LinkFlex Fleet
+        document.getElementById("fleet-page-title").textContent = tr.fleet_page_title;
+        document.getElementById("fleet-page-subtitle").textContent = tr.fleet_page_subtitle;
+        document.getElementById("fleet-col-name").textContent = tr.fleet_col_name;
+        document.getElementById("fleet-col-ip").textContent = tr.fleet_col_ip;
+        document.getElementById("fleet-col-username").textContent = tr.fleet_col_username;
+        document.getElementById("fleet-col-password").textContent = tr.fleet_col_password;
+        document.getElementById("fleet-cli-run-btn").textContent = tr.fleet_cli_run;
+        document.getElementById("fleet-cli-command").placeholder = tr.fleet_cli_placeholder;
+        document.getElementById("fleet-btn-back-text").textContent = tr.wiz_btn_back;
+        updateFleetConnectButton();
+
+        // Guides
+        document.getElementById("guides-page-title").textContent = tr.guides_page_title;
+        document.getElementById("guides-page-subtitle").textContent = tr.guides_page_subtitle;
+        document.getElementById("guide-search-input").placeholder = tr.guides_search_placeholder;
+        if (guidesLoaded) renderGuidesPage();
+
         document.getElementById("refresh-history-btn").title = tr.btn_refresh;
         document.getElementById("refresh-files-btn").title = tr.btn_refresh;
 
@@ -1350,7 +1497,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // dark/light theme button next to it (same class, same behavior pattern).
     function updateLangButton() {
         const btn = document.getElementById("lang-toggle");
-        if (btn) btn.textContent = currentLanguage === "he" ? "🌐 עברית" : "🌐 English";
+        // Shows the language clicking will switch TO (not the current one) -
+        // same convention fix as the theme button above.
+        if (btn) btn.textContent = currentLanguage === "he" ? "🌐 English" : "🌐 עברית";
     }
 
     // App version pinned to the bottom start-corner of every page: the CSS
@@ -1509,7 +1658,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Settings) via the labeled sidebar. The current page is reflected in the
     // URL hash so a browser refresh brings you back to the same page.
     // =====================================================================
-    const ALL_PAGES = ["dashboard", "wizard", "targets", "scheduling", "reports", "logs"];
+    const ALL_PAGES = ["dashboard", "wizard", "targets", "scheduling", "reports", "logs", "fleet", "guides"];
 
     function switchPage(page, opts) {
         opts = opts || {};
@@ -1522,7 +1671,11 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         document.querySelectorAll(".side-nav-item").forEach(item => {
-            item.classList.toggle("active", item.dataset.page === page);
+            // The Fleet page has no sidebar item of its own - it's reached
+            // from inside the automations catalog - so keep "Run Automation"
+            // highlighted while viewing it instead of leaving nothing active.
+            const matchesPage = item.dataset.page === page || (page === "fleet" && item.dataset.page === "wizard");
+            item.classList.toggle("active", matchesPage);
         });
 
         // pushState (not replaceState) so every page switch is a real,
@@ -1543,6 +1696,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (page === "targets") loadTargetsPage();
         if (page === "scheduling") loadSchedulingPage();
         if (page === "reports" || page === "logs") loadReportsAndHistory();
+        if (page === "fleet") loadFleetPage();
+        if (page === "guides") loadGuidesPage();
     }
 
     // Restores the correct page when the user clicks the browser's physical
@@ -1941,6 +2096,63 @@ document.addEventListener("DOMContentLoaded", () => {
     const eyeOpenSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
     const eyeClosedSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
 
+    function bindIdracTargets(scope) {
+        const hidden = scope.querySelector("#idrac_targets");
+        if (!hidden) return;
+
+        function sync() {
+            const targets = [];
+            scope.querySelectorAll(".idrac-target-check").forEach(cb => {
+                if (!cb.checked) return;
+                const server = cb.getAttribute("data-server");
+                const urlInput = scope.querySelector(`.idrac-target-url[data-server="${server}"]`);
+                const url = (urlInput && urlInput.value.trim()) || "";
+                if (url) targets.push({ server, url });
+            });
+            hidden.value = JSON.stringify(targets);
+        }
+
+        scope.querySelectorAll(".idrac-target-check, .idrac-target-url").forEach(el => {
+            el.addEventListener("change", sync);
+            el.addEventListener("input", sync);
+        });
+        sync();   // seed the hidden field immediately (e.g. from a "Run again" prefill)
+    }
+
+    function bindFirewallFileUpload() {
+        const browseBtn = document.getElementById("firewall-file-browse-btn");
+        const fileInput = document.getElementById("firewall_file_input");
+        const statusEl = document.getElementById("firewall-file-status");
+        const pathInput = document.getElementById("firewall_file_path");
+        if (!browseBtn || !fileInput) return;
+
+        browseBtn.addEventListener("click", () => fileInput.click());
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            statusEl.textContent = t().uploading_file;
+            const formData = new FormData();
+            formData.append("file", file);
+            fetch("/api/upload", { method: "POST", body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.ok) {
+                        pathInput.value = data.path;
+                        statusEl.textContent = data.filename;
+                    } else {
+                        pathInput.value = "";
+                        statusEl.textContent = t().no_file_selected;
+                        showError(data.error || t().upload_failed);
+                    }
+                })
+                .catch(err => {
+                    pathInput.value = "";
+                    statusEl.textContent = t().no_file_selected;
+                    showError(t().error_connection, err);
+                });
+        });
+    }
+
     function buildPasswordField(id, label, defaultValue) {
         const visible = prefs.show_password === true;
         return `
@@ -2204,6 +2416,80 @@ document.addEventListener("DOMContentLoaded", () => {
             form.appendChild(buildChromeDriverField(prefill.chromedriver_path));
         }
 
+        // LinkFlex Inventory: Proxmox + iDRAC connection fields (own dedicated
+        // field names, not the generic username/password used everywhere
+        // else, since a single run needs BOTH a Proxmox login AND an iDRAC
+        // login at once) plus an uploaded firewall report.
+        if (script.inputs.includes("prox_url")) {
+            const proxBlock = document.createElement("div");
+            proxBlock.innerHTML = `
+                <div class="form-group">
+                    <label for="prox_url">${tr.linkflex_prox_url} <span class="required">*</span></label>
+                    <input type="text" id="prox_url" name="prox_url" class="form-control" value="${prefill.prox_url || "https://192.168.130.31:8006"}">
+                </div>
+                <div class="form-group">
+                    <label for="prox_user">${tr.linkflex_prox_user} <span class="required">*</span></label>
+                    <input type="text" id="prox_user" name="prox_user" class="form-control" value="${prefill.prox_user || "root"}">
+                </div>
+                ${buildPasswordField("prox_pass", tr.linkflex_prox_pass, prefill.prox_pass || "CnspveAdm@!")}
+            `;
+            form.appendChild(proxBlock);
+            bindPasswordToggles(proxBlock);
+        }
+        if (script.inputs.includes("idrac_targets")) {
+            const idracBlock = document.createElement("div");
+            // Each PVE host has its own iDRAC IP - no single shared address -
+            // so this is a checkbox + IP field per server (any combination:
+            // none, one, two, or all three), not a single dropdown. The
+            // login (user/pass) is the same account for all of them.
+            const prevByServer = {};
+            (prefill.idrac_targets || []).forEach(t => { if (t && t.server) prevByServer[t.server] = t.url || ""; });
+            const defaultUrlFor = { PVE1: "https://192.168.130.32/", PVE2: "", PVE3: "" };
+            idracBlock.innerHTML = `
+                <div class="form-group">
+                    <label for="idrac_user">${tr.linkflex_idrac_user} <span class="required">*</span></label>
+                    <input type="text" id="idrac_user" name="idrac_user" class="form-control" value="${prefill.idrac_user || "root"}">
+                </div>
+                ${buildPasswordField("idrac_pass", tr.linkflex_idrac_pass, prefill.idrac_pass || "CnsidracAdm@!")}
+                <div class="form-group">
+                    <label>${tr.linkflex_idrac_servers}</label>
+                    <div class="idrac-target-list">
+                        ${["PVE1", "PVE2", "PVE3"].map(s => `
+                            <div class="idrac-target-row">
+                                <label class="idrac-target-checkbox">
+                                    <input type="checkbox" class="idrac-target-check" data-server="${s}" ${s in prevByServer ? "checked" : ""}>
+                                    ${s}
+                                </label>
+                                <input type="text" class="idrac-target-url form-control" data-server="${s}"
+                                       placeholder="https://..." value="${s in prevByServer ? prevByServer[s] : (defaultUrlFor[s] || "")}">
+                            </div>
+                        `).join("")}
+                    </div>
+                    <div class="form-help">${tr.linkflex_idrac_servers_hint}</div>
+                </div>
+                <input type="hidden" id="idrac_targets" name="idrac_targets" value="">
+            `;
+            form.appendChild(idracBlock);
+            bindPasswordToggles(idracBlock);
+            bindIdracTargets(idracBlock);
+        }
+        if (script.inputs.includes("firewall_file")) {
+            const fileBlock = document.createElement("div");
+            fileBlock.className = "form-group";
+            fileBlock.innerHTML = `
+                <label>${tr.linkflex_firewall_file}</label>
+                <div class="file-upload-row">
+                    <button type="button" id="firewall-file-browse-btn" class="btn btn-secondary btn-sm">${tr.browse_button}</button>
+                    <span id="firewall-file-status" class="file-upload-status">${prefill.firewall_file_name || tr.no_file_selected}</span>
+                </div>
+                <input type="file" id="firewall_file_input" accept=".txt" style="display:none;">
+                <input type="hidden" id="firewall_file_path" name="firewall_file_path" value="${prefill.firewall_file_path || ""}">
+                <div class="form-help">${tr.linkflex_firewall_hint}</div>
+            `;
+            form.appendChild(fileBlock);
+            bindFirewallFileUpload();
+        }
+
         if (script.inputs.includes("commands")) {
             const cmdBlock = document.createElement("div");
             cmdBlock.className = "form-group";
@@ -2296,6 +2582,42 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
+        // Generic fallback: any input name not covered by one of the
+        // specific blocks above gets a plain labeled text field. Values flow
+        // straight through unchanged - buildRunPayload() already forwards
+        // any form field it doesn't specifically recognize, and the backend
+        // maps it to PSAUTO_<FIELD_NAME_UPPERCASE> (see
+        // _GENERIC_PASSTHROUGH_FIELDS in server.py's _launch_run). This lets
+        // a script declare a brand-new one-off field (a PO number, a
+        // firmware folder path, ...) with zero new frontend code.
+        const GENERIC_FIELD_HANDLED = new Set([
+            "mode", "base_ip", "start_suffix", "count", "ips", "raid_name", "newips",
+            "netmask", "gateway", "hostnames", "dns", "ntp", "use_default_creds",
+            "username", "password", "chromedriver", "prox_url", "prox_user", "prox_pass",
+            "idrac_targets", "firewall_file", "commands",
+        ]);
+        if (script.inputs.includes("idrac_targets")) {
+            GENERIC_FIELD_HANDLED.add("idrac_user");
+            GENERIC_FIELD_HANDLED.add("idrac_pass");
+        }
+        script.inputs.filter(name => !GENERIC_FIELD_HANDLED.has(name)).forEach(name => {
+            const label = (tr.generic_field_labels && tr.generic_field_labels[name]) ||
+                name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+            const block = document.createElement("div");
+            if (/pass/i.test(name)) {
+                block.innerHTML = buildPasswordField(name, label, prefill[name] || "");
+                form.appendChild(block);
+                bindPasswordToggles(block);
+                return;
+            }
+            block.className = "form-group";
+            block.innerHTML = `
+                <label for="${name}">${label}</label>
+                <input type="text" id="${name}" name="${name}" class="form-control" value="${prefill[name] || ""}">
+            `;
+            form.appendChild(block);
+        });
+
         form.addEventListener("change", () => {
             const ipsEl = document.getElementById("ips");
             if (ipsEl) savePref("last_ips", ipsEl.value);
@@ -2374,15 +2696,36 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Functional categories, in the order they appear in the sidebar. Must
     // match the backend's classify_script_category() keys.
-    const CATEGORY_ORDER = ["report", "configuration", "power", "storage", "network", "validation", "redhat_validation", "windows", "general"];
+    const CATEGORY_ORDER = ["report", "configuration", "power", "storage", "network", "validation", "redhat_validation", "netapp", "windows", "general"];
 
     function categoryLabel(key) {
         const tr = t();
         return (tr.categories && tr.categories[key]) ? tr.categories[key] : key;
     }
 
+    // LinkFlex Fleet isn't a real script file - it's a synthetic catalog card,
+    // injected client-side only for Applied/Link Flex, that opens the fleet
+    // page (checkbox machine list + Connect + CLI) instead of the normal
+    // wizard input form. Lives right next to LinkFlex Inventory Automation,
+    // in the same category, since both are Applied/Link Flex automations.
+    function fleetCatalogEntry() {
+        return {
+            id: "__fleet_connect__",
+            name: t().fleet_catalog_name,
+            description: TRANSLATIONS.he.fleet_catalog_desc,
+            description_en: TRANSLATIONS.en.fleet_catalog_desc,
+            category: "report",
+            type: "custom",
+            risk: "read",
+            __isFleetEntry: true
+        };
+    }
+
     function filteredScriptsForSearch() {
         let list = scriptsData;
+        if (ctx.company === "applied" && ctx.stage === "link_flex") {
+            list = list.concat([fleetCatalogEntry()]);
+        }
         if (wizardCategoryFilter !== "all") {
             list = list.filter(s => (s.category || "general") === wizardCategoryFilter);
         }
@@ -2404,10 +2747,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!el) return;
         const tr = t();
         const counts = {};
+        const hasFleetEntry = ctx.company === "applied" && ctx.stage === "link_flex";
+        const totalCount = scriptsData.length + (hasFleetEntry ? 1 : 0);
         scriptsData.forEach(s => {
             const c = s.category || "general";
             counts[c] = (counts[c] || 0) + 1;
         });
+        if (hasFleetEntry) counts.report = (counts.report || 0) + 1;
         const cats = CATEGORY_ORDER.filter(c => counts[c]);
         const rowHtml = (key, label, count) => {
             const active = wizardCategoryFilter === key ? " active" : "";
@@ -2416,7 +2762,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <span class="cat-name">${label}</span>
                     </button>`;
         };
-        let html = rowHtml("all", tr.cat_all, scriptsData.length);
+        let html = rowHtml("all", tr.cat_all, totalCount);
         cats.forEach(c => { html += rowHtml(c, categoryLabel(c), counts[c]); });
         el.innerHTML = html;
         el.querySelectorAll(".cat-row").forEach(row => {
@@ -2493,10 +2839,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Python automations grouped together first, then PowerShell (stable
-        // sort - relative order within each language is preserved).
+        // sort - relative order within each language is preserved). The
+        // synthetic LinkFlex Fleet entry (type "custom") sorts into the same
+        // first group so it lands right next to LinkFlex Inventory Automation.
         scripts = scripts.slice().sort((a, b) => {
-            if (a.type === b.type) return 0;
-            return a.type === "python" ? -1 : 1;
+            const bucket = (s) => s.type === "powershell" ? 1 : -1;
+            return bucket(a) - bucket(b);
         });
 
         scripts.forEach(script => {
@@ -2505,29 +2853,45 @@ document.addEventListener("DOMContentLoaded", () => {
             if (selectedScript && selectedScript.id === script.id) card.classList.add("sel");
             card.title = scriptDescription(script);
             const dur = scriptAvgDuration(script);
+            const tagLabel = script.__isFleetEntry ? "SSH" : (script.type === "python" ? "Python" : "PowerShell");
+            const icon = script.__isFleetEntry ? "🖥️" : riskIcon(script);
             card.innerHTML = `
                 <div class="cc-top">
-                    <div class="cc-ico risk-ico-${script.risk || "read"}">${riskIcon(script)}</div>
+                    <div class="cc-ico risk-ico-${script.risk || "read"}">${icon}</div>
+                    ${script.__isFleetEntry ? "" : `
                     <button type="button" class="script-desc-edit-btn" title="${tr.edit_desc_tip}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
                         </svg>
-                    </button>
+                    </button>`}
                 </div>
                 <div class="cc-name"></div>
                 <div class="cc-desc"></div>
                 <div class="cc-foot">
-                    <span class="tag">${script.type === "python" ? "Python" : "PowerShell"}</span>
+                    <span class="tag">${tagLabel}</span>
                     ${riskBadgeHtml(script.risk || "read")}
                     ${dur ? `<span class="cc-dur">⏱ ${dur}</span>` : ""}
                 </div>
             `;
             card.querySelector(".cc-name").textContent = script.name;
             card.querySelector(".cc-desc").textContent = scriptDescription(script);
-            card.querySelector(".script-desc-edit-btn").addEventListener("click", (e) => {
-                e.stopPropagation();
-                openEditDescModal(script);
-            });
+            const editBtn = card.querySelector(".script-desc-edit-btn");
+            if (editBtn) {
+                editBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    openEditDescModal(script);
+                });
+            }
+
+            if (script.__isFleetEntry) {
+                // Not a real script run - clicking it jumps straight to the
+                // dedicated Fleet page (machine list + Connect + CLI) instead
+                // of going through the normal input-form wizard steps.
+                card.addEventListener("click", () => switchPage("fleet"));
+                list.appendChild(card);
+                return;
+            }
+
             card.addEventListener("click", () => {
                 document.querySelectorAll("#wiz-auto-list .cat-card").forEach(c => c.classList.remove("sel"));
                 card.classList.add("sel");
@@ -4026,7 +4390,25 @@ document.addEventListener("DOMContentLoaded", () => {
         if (ids.length) confirmDeleteHistoryEntries(ids);
     });
 
+    // Office-installed check happens client-side (environmentInfo is already
+    // loaded at login) so a .docx/.xlsx goes straight to the in-browser
+    // preview when there's no Word/Excel to hand it to - never a failed
+    // os.startfile() round-trip first. Folders and other file types (.csv,
+    // .log, .pdf, special "*_DIR" keywords) are unaffected - always native.
+    function _isOfficeFile(path) {
+        const lower = (path || "").toLowerCase();
+        return lower.endsWith(".docx") || lower.endsWith(".xlsx");
+    }
+    function _officeAppAvailable(path) {
+        const env = environmentInfo || {};
+        return path.toLowerCase().endsWith(".docx") ? !!env.word_installed : !!env.excel_installed;
+    }
+
     function openReportLocally(path) {
+        if (_isOfficeFile(path) && !_officeAppAvailable(path)) {
+            previewFileInBrowser(path);
+            return;
+        }
         fetch("/api/reports/open", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -4039,6 +4421,76 @@ document.addEventListener("DOMContentLoaded", () => {
             })
             .catch(err => showError(t().error_connection, err));
     }
+
+    // ---------------------------------------------------------------------
+    // In-browser .docx/.xlsx preview (mammoth.js / SheetJS) - used both as
+    // the no-Office fallback above and directly by the Guides viewer, which
+    // always previews in-app rather than trying to os.startfile() a
+    // read-only reference document.
+    // ---------------------------------------------------------------------
+    function previewFileInBrowser(path, displayName) {
+        const overlay = document.getElementById("file-preview-overlay");
+        const titleEl = document.getElementById("file-preview-title");
+        const bodyEl = document.getElementById("file-preview-body");
+        const isDocx = path.toLowerCase().endsWith(".docx");
+
+        titleEl.textContent = displayName || path.split(/[\\/]/).pop();
+        bodyEl.innerHTML = `<div class="file-preview-loading">${t().preview_loading}</div>`;
+        overlay.style.display = "flex";
+
+        fetch(`/api/reports/preview?path=${encodeURIComponent(path)}`)
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.arrayBuffer();
+            })
+            .then(buffer => {
+                if (isDocx) {
+                    return mammoth.convertToHtml({ arrayBuffer: buffer }).then(result => {
+                        bodyEl.innerHTML = result.value || `<p>${t().preview_empty}</p>`;
+                    });
+                }
+                renderXlsxPreview(buffer, bodyEl);
+            })
+            .catch(err => {
+                bodyEl.innerHTML = `<div class="file-preview-error">${t().preview_failed}: ${err}</div>`;
+            });
+    }
+
+    function renderXlsxPreview(buffer, bodyEl) {
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheetNames = workbook.SheetNames;
+
+        const tabsHtml = sheetNames.length > 1
+            ? `<div class="file-preview-sheet-tabs">${sheetNames.map((n, i) =>
+                `<button data-sheet-index="${i}" class="${i === 0 ? "active" : ""}">${n}</button>`).join("")}</div>`
+            : "";
+        bodyEl.innerHTML = `${tabsHtml}<div class="xlsx-table-wrap" id="xlsx-table-wrap"></div>`;
+
+        function renderSheet(index) {
+            const sheet = workbook.Sheets[sheetNames[index]];
+            const html = XLSX.utils.sheet_to_html(sheet, { editable: false });
+            document.getElementById("xlsx-table-wrap").innerHTML = html;
+        }
+        renderSheet(0);
+
+        bodyEl.querySelectorAll(".file-preview-sheet-tabs button").forEach(btn => {
+            btn.addEventListener("click", () => {
+                bodyEl.querySelectorAll(".file-preview-sheet-tabs button").forEach(b => b.classList.remove("active"));
+                btn.classList.add("active");
+                renderSheet(parseInt(btn.dataset.sheetIndex, 10));
+            });
+        });
+    }
+
+    document.getElementById("file-preview-close-btn").addEventListener("click", () => {
+        document.getElementById("file-preview-overlay").style.display = "none";
+        document.getElementById("file-preview-body").innerHTML = "";
+    });
+    document.getElementById("file-preview-overlay").addEventListener("click", (e) => {
+        if (e.target.id === "file-preview-overlay") {
+            document.getElementById("file-preview-close-btn").click();
+        }
+    });
 
     function revealReportLocally(path) {
         fetch("/api/reports/reveal", {
@@ -4256,6 +4708,12 @@ document.addEventListener("DOMContentLoaded", () => {
         for (const [key, value] of formData.entries()) {
             if (key === "use_default_creds") payload[key] = (value === "yes");
             else if (key === "ips" || key === "hostnames" || key === "newips") payload[key] = expandRangeLines(value, key === "newips" ? "ips" : key);
+            else if (key === "idrac_targets") {
+                // Hidden field holds a JSON-encoded array (built by
+                // bindIdracTargets below) - parse it back into a real array
+                // so the server receives actual JSON, not a double-encoded string.
+                try { payload[key] = value ? JSON.parse(value) : []; } catch (e) { payload[key] = []; }
+            }
             else payload[key] = value;
         }
         return payload;
@@ -4783,6 +5241,350 @@ document.addEventListener("DOMContentLoaded", () => {
         // produced. All of a run's files share one run sub-folder, so revealing
         // the first output highlights that run folder (i.e. the whole result).
         revealRunOutput(outputs[0].path);
+    });
+
+    // =====================================================================
+    // LinkFlex Fleet: checkbox-selectable machine inventory + a CLI box that
+    // runs a typed command over SSH (plink, server-side) on every selected
+    // machine in parallel. No extra confirm dialog before Run by design -
+    // this is meant to work like a real terminal, not a guided wizard.
+    // =====================================================================
+    let fleetMachines = [];
+    let fleetSelectedIds = [];
+
+    function loadFleetPage() {
+        return fetch("/api/fleet/machines")
+            .then(r => r.json())
+            .then(data => { fleetMachines = Array.isArray(data) ? data : []; renderFleetTable(); })
+            .catch(err => showError("Fleet", err));
+    }
+
+    function renderFleetTable() {
+        const tr = t();
+        const tbody = document.getElementById("fleet-machines-body");
+        if (!tbody) return;
+        tbody.innerHTML = fleetMachines.map(m => `
+            <tr data-id="${m.id}">
+                <td><input type="checkbox" class="fleet-select-check" ${fleetSelectedIds.includes(m.id) ? "checked" : ""}></td>
+                <td><input type="text" class="form-control fleet-field" data-field="name" value="${m.name}"></td>
+                <td><input type="text" class="form-control fleet-field" data-field="ip" value="${m.ip}"></td>
+                <td><input type="text" class="form-control fleet-field" data-field="username" value="${m.username}"></td>
+                <td><input type="password" class="form-control fleet-field" data-field="password" placeholder="${tr.fleet_password_placeholder}" autocomplete="new-password"></td>
+                <td><button type="button" class="btn btn-sm btn-secondary fleet-save-btn">${tr.fleet_save}</button></td>
+            </tr>
+        `).join("");
+
+        tbody.querySelectorAll(".fleet-select-check").forEach(cb => {
+            cb.addEventListener("change", () => {
+                const id = cb.closest("tr").getAttribute("data-id");
+                if (cb.checked) { if (!fleetSelectedIds.includes(id)) fleetSelectedIds.push(id); }
+                else { fleetSelectedIds = fleetSelectedIds.filter(x => x !== id); }
+                updateFleetConnectButton();
+            });
+        });
+
+        tbody.querySelectorAll(".fleet-save-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const row = btn.closest("tr");
+                const id = row.getAttribute("data-id");
+                const payload = {};
+                row.querySelectorAll(".fleet-field").forEach(inp => {
+                    const field = inp.getAttribute("data-field");
+                    if (field === "password" && !inp.value) return;   // blank = keep unchanged
+                    payload[field] = inp.value;
+                });
+                fetch(`/api/fleet/machines/${id}`, {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+                })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.ok) {
+                            const m = fleetMachines.find(x => x.id === id);
+                            if (m) { m.name = data.name; m.ip = data.ip; m.username = data.username; }
+                            row.querySelector('[data-field="password"]').value = "";
+                            showToast(t().fleet_saved);
+                        } else {
+                            showError(data.error || t().fleet_save_failed);
+                        }
+                    })
+                    .catch(err => showError(t().error_connection, err));
+            });
+        });
+
+        updateFleetConnectButton();
+    }
+
+    function updateFleetConnectButton() {
+        const btn = document.getElementById("fleet-connect-btn");
+        const countEl = document.getElementById("fleet-selected-count");
+        if (!btn) return;
+        btn.textContent = t().fleet_connect;
+        btn.disabled = fleetSelectedIds.length === 0;
+        if (countEl) countEl.textContent = fleetSelectedIds.length ? `${fleetSelectedIds.length} ${t().fleet_selected_suffix}` : "";
+    }
+
+    function buildFleetResultBlock(res) {
+        const block = document.createElement("div");
+        block.className = "fleet-result-block " + (res.ok ? "ok" : "fail");
+        const head = document.createElement("div");
+        head.className = "fleet-result-head";
+        head.textContent = `${res.ok ? "✅" : "❌"} ${res.name} (${res.ip})`;
+        const pre = document.createElement("pre");
+        pre.className = "fleet-result-output";
+        pre.textContent = res.output || "";   // textContent, not innerHTML - command output is untrusted text
+        block.appendChild(head);
+        block.appendChild(pre);
+        return block;
+    }
+
+    function runFleetCommand() {
+        const cmdInput = document.getElementById("fleet-cli-command");
+        const command = cmdInput.value.trim();
+        if (!command) return;
+        const runBtn = document.getElementById("fleet-cli-run-btn");
+        const resultsEl = document.getElementById("fleet-cli-results");
+        runBtn.disabled = true;
+        resultsEl.textContent = "";
+        const loading = document.createElement("div");
+        loading.className = "fleet-cli-loading";
+        loading.textContent = t().fleet_running;
+        resultsEl.appendChild(loading);
+
+        fetch("/api/fleet/run", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ machine_ids: fleetSelectedIds, command })
+        })
+            .then(r => r.json())
+            .then(data => {
+                runBtn.disabled = false;
+                resultsEl.textContent = "";
+                if (!data.ok) { showError(data.error || t().fleet_run_failed); return; }
+                data.results.forEach(res => resultsEl.appendChild(buildFleetResultBlock(res)));
+            })
+            .catch(err => { runBtn.disabled = false; resultsEl.textContent = ""; showError(t().error_connection, err); });
+    }
+
+    document.getElementById("fleet-back-btn").addEventListener("click", () => switchPage("wizard"));
+
+    document.getElementById("fleet-connect-btn").addEventListener("click", () => {
+        const targets = fleetMachines.filter(m => fleetSelectedIds.includes(m.id));
+        const targetsEl = document.getElementById("fleet-cli-targets");
+        targetsEl.innerHTML = "";
+        targets.forEach(m => {
+            const chip = document.createElement("span");
+            chip.className = "fleet-cli-chip";
+            chip.textContent = `${m.name} (${m.ip})`;
+            targetsEl.appendChild(chip);
+        });
+        document.getElementById("fleet-cli-section").style.display = "block";
+        document.getElementById("fleet-cli-results").textContent = "";
+        const cmdInput = document.getElementById("fleet-cli-command");
+        cmdInput.value = "";
+        cmdInput.focus();
+    });
+    document.getElementById("fleet-cli-run-btn").addEventListener("click", runFleetCommand);
+    document.getElementById("fleet-cli-command").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") runFleetCommand();
+    });
+
+    // =====================================================================
+    // Guides: browsable catalog of the platform runbooks under Guides/<Platform>/
+    // (Word/Excel, no run/wizard semantics - just search, group, and preview).
+    // Backed by GET /api/guides ({platform: [{title, revision, filename, type,
+    // path, size_bytes}, ...]}); everything below is client-side grouping,
+    // search and rendering over that one fetch. Viewing always goes through
+    // the same in-app preview overlay as reports (see previewFileInBrowser) -
+    // guides are shared read-only reference documents, never opened natively,
+    // so a stray edit in Word can never get saved back over the master file.
+    // =====================================================================
+    let guidesData = null;
+    let guidesLoaded = false;
+    let currentGuidePlatform = "Nova";
+    let guidesSearchTerm = "";
+    const guidesOpenGroups = new Set();
+    let guidesGroupsInitialized = false;
+
+    const GUIDE_PLATFORM_ORDER = ["Nova", "Cognyte", "Applied"];
+    const GUIDE_PLATFORM_LABEL_KEY = { Nova: "guides_platform_nova", Cognyte: "guides_platform_cognyte", Applied: "guides_platform_applied" };
+    // Groups guides within a platform using the same topic vocabulary already
+    // used for that platform's automations (see companiesData "nova" stages
+    // and the Guides/Cognyte/<Product> folder names) - matched by keyword
+    // against the guide's title since /api/guides only reports the filename-
+    // derived title, not the source subfolder.
+    const GUIDE_GROUP_RULES = [
+        // Product-line keywords checked first: a Cognyte title like "Cognyte
+        // RelientX SWI" also contains "SWI", but the distinguishing group is
+        // the product line, not the (identical, for every Cognyte guide here)
+        // SWI suffix.
+        { match: /relientx/i, label: "RelientX" },
+        { match: /vantage/i, label: "VantageX" },
+        { match: /anti\s*virus/i, label: "Anti Virus" },
+        { match: /\batp\b/i, label: "ATP" },
+        { match: /\bswi\b/i, label: "SWI" },
+    ];
+
+    function guideGroupLabel(title) {
+        const rule = GUIDE_GROUP_RULES.find(r => r.match.test(title));
+        return rule ? rule.label : t().guides_group_other;
+    }
+
+    function guideFileSizeLabel(bytes) {
+        const tr = t();
+        if (!bytes) return "";
+        if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " " + tr.guides_size_unit_mb;
+        return Math.round(bytes / 1024) + " " + tr.guides_size_unit_kb;
+    }
+
+    function loadGuidesPage() {
+        return fetch("/api/guides")
+            .then(r => r.json())
+            .then(data => {
+                guidesData = (data && typeof data === "object") ? data : {};
+                guidesLoaded = true;
+                renderGuidesPage();
+            })
+            .catch(err => showError("Guides", err));
+    }
+
+    function renderGuidesTabs() {
+        const el = document.getElementById("guide-platform-tabs");
+        const tr = t();
+        el.innerHTML = GUIDE_PLATFORM_ORDER.map(p => {
+            const count = ((guidesData && guidesData[p]) || []).length;
+            const active = currentGuidePlatform === p ? " active" : "";
+            return `<button type="button" class="guide-tab-btn${active}" data-platform="${p}">
+                        <span>${tr[GUIDE_PLATFORM_LABEL_KEY[p]]}</span>
+                        <span class="guide-tab-count">${count}</span>
+                    </button>`;
+        }).join("");
+        el.querySelectorAll(".guide-tab-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                currentGuidePlatform = btn.dataset.platform;
+                guidesOpenGroups.clear();
+                guidesGroupsInitialized = false;
+                renderGuidesPage();
+            });
+        });
+    }
+
+    function buildGuideCard(guideGroup) {
+        // guideGroup: { title, entries: [{revision, filename, type, path, size_bytes}, ...] }
+        const tr = t();
+        const entries = guideGroup.entries.slice().sort((a, b) => (b.revision || "").localeCompare(a.revision || ""));
+        const latest = entries[0];
+        const typeIcon = latest.type === "excel" ? "📊" : "📄";
+        const typeLabel = latest.type === "excel" ? "XLSX" : "DOCX";
+
+        const card = document.createElement("div");
+        card.className = "cat-card guide-card";
+        card.title = guideGroup.title;
+        card.innerHTML = `
+            <div class="cc-top">
+                <div class="cc-ico risk-ico-read">${typeIcon}</div>
+                <button type="button" class="guide-copy-btn" title="${tr.guides_copy_path_tip}">📋</button>
+            </div>
+            <div class="cc-name"></div>
+            <div class="cc-desc"></div>
+            <div class="guide-revisions"></div>
+            <div class="cc-foot"><span class="tag">${typeLabel}</span></div>
+        `;
+        card.querySelector(".cc-name").textContent = guideGroup.title;
+        card.querySelector(".cc-desc").textContent = guideFileSizeLabel(latest.size_bytes);
+
+        const revisionsEl = card.querySelector(".guide-revisions");
+        entries.forEach((entry, idx) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "guide-revision-chip" + (idx === 0 ? " active" : "");
+            chip.textContent = entry.revision ? ("Rev " + entry.revision) : tr.guides_view;
+            chip.addEventListener("click", () => {
+                const label = entry.revision ? `${guideGroup.title} - Rev ${entry.revision}` : guideGroup.title;
+                previewFileInBrowser(entry.path, label);
+            });
+            revisionsEl.appendChild(chip);
+        });
+
+        card.querySelector(".guide-copy-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(latest.path)
+                .then(() => showToast(tr.guides_copied_toast))
+                .catch(() => showError(tr.guides_copy_failed, ""));
+        });
+
+        return card;
+    }
+
+    function renderGuidesPage() {
+        if (!guidesLoaded) return;
+        renderGuidesTabs();
+        const tr = t();
+        const accordionEl = document.getElementById("guide-accordion");
+        const platformGuides = (guidesData && guidesData[currentGuidePlatform]) || [];
+
+        if (!platformGuides.length) {
+            accordionEl.innerHTML = `<div class="guide-empty-state">${tr.guides_empty_platform}</div>`;
+            return;
+        }
+
+        // Group flat guide entries by title (revisions of the same guide
+        // collapse into one card - see buildGuideCard), then by topic.
+        const byTitle = {};
+        platformGuides.forEach(g => {
+            (byTitle[g.title] = byTitle[g.title] || []).push(g);
+        });
+        const q = guidesSearchTerm.trim().toLowerCase();
+        const groups = {};
+        Object.keys(byTitle).forEach(title => {
+            if (q && !title.toLowerCase().includes(q)) return;
+            const groupLabel = guideGroupLabel(title);
+            (groups[groupLabel] = groups[groupLabel] || []).push({ title, entries: byTitle[title] });
+        });
+        const groupNames = Object.keys(groups).sort((a, b) => {
+            if (a === tr.guides_group_other) return 1;
+            if (b === tr.guides_group_other) return -1;
+            return a.localeCompare(b);
+        });
+
+        if (!groupNames.length) {
+            accordionEl.innerHTML = `<div class="guide-empty-state">${tr.guides_no_results}</div>`;
+            return;
+        }
+
+        // First render for this platform opens every group by default; after
+        // that, whatever the user has manually opened/closed is kept as-is.
+        if (!guidesGroupsInitialized) {
+            groupNames.forEach(n => guidesOpenGroups.add(n));
+            guidesGroupsInitialized = true;
+        }
+
+        accordionEl.innerHTML = "";
+        groupNames.forEach(groupName => {
+            const cards = groups[groupName];
+            const isOpen = q ? true : guidesOpenGroups.has(groupName);
+            const section = document.createElement("div");
+            section.className = "guide-accordion-section" + (isOpen ? " open" : "");
+            section.innerHTML = `
+                <button type="button" class="guide-accordion-header">
+                    <span>${groupName}</span>
+                    <span class="guide-accordion-count">${cards.length}</span>
+                    <span class="guide-accordion-chevron">▸</span>
+                </button>
+                <div class="guide-accordion-body"><div class="guide-card-grid"></div></div>
+            `;
+            const grid = section.querySelector(".guide-card-grid");
+            cards.forEach(c => grid.appendChild(buildGuideCard(c)));
+            section.querySelector(".guide-accordion-header").addEventListener("click", () => {
+                section.classList.toggle("open");
+                if (section.classList.contains("open")) guidesOpenGroups.add(groupName);
+                else guidesOpenGroups.delete(groupName);
+            });
+            accordionEl.appendChild(section);
+        });
+    }
+
+    document.getElementById("guide-search-input").addEventListener("input", (e) => {
+        guidesSearchTerm = e.target.value;
+        renderGuidesPage();
     });
 
     // =====================================================================
