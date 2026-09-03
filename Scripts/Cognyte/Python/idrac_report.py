@@ -21,15 +21,11 @@ from PIL import ImageGrab
 USERNAME = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip()
 PASSWORD = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "")
 if not USERNAME or not PASSWORD:
-    if sys.stdin is not None and sys.stdin.isatty():
-        import getpass
-        if not USERNAME:
-            USERNAME = input("iDRAC username: ").strip()
-        if not PASSWORD:
-            PASSWORD = getpass.getpass("iDRAC password: ")
-    else:
-        print("ERROR: No iDRAC username/password available and there is no console to prompt on.", flush=True)
-        sys.exit(1)
+    import getpass
+    if not USERNAME:
+        USERNAME = input("iDRAC username: ").strip()
+    if not PASSWORD:
+        PASSWORD = getpass.getpass("iDRAC password: ")
 
 def _resolve_chromedriver():
     """Prefer the exact driver handed over by the PS Automation app (env var).

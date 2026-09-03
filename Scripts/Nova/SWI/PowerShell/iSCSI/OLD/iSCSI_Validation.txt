@@ -1,0 +1,107 @@
+# =========================
+# iSCSI audit / validation
+# =========================
+
+$InitiatorIP = '10.11.11.11'   # APP1 / change per VM
+$ExpectedPortals = @('10.11.11.3','10.11.11.4','10.11.11.5','10.11.11.6')
+$TargetIQN = 'iqn.1988-11.com.dell:01.array.bc305b68b95c'
+
+Write-Host "=== 1) Initiator port ===" -ForegroundColor Cyan
+Get-InitiatorPort |
+    Where-Object { $_.ConnectionType -eq 'iSCSI' } |
+    Select-Object InstanceName, NodeAddress, PortAddress, ConnectionType |
+    Format-Table -Auto
+
+Write-Host "`n=== 2) Discovery portals ===" -ForegroundColor Cyan
+$Portals = Get-IscsiTargetPortal |
+    Where-Object {
+        $_.TargetPortalAddress -in $ExpectedPortals -and
+        $_.InitiatorPortalAddress -eq $InitiatorIP
+    } |
+    Sort-Object TargetPortalAddress
+
+$Portals |
+    Select-Object InitiatorInstanceName, InitiatorPortalAddress, TargetPortalAddress, TargetPortalPortNumber |
+    Format-Table -Auto
+
+Write-Host "`n=== 3) Registered targets ===" -ForegroundColor Cyan
+Get-IscsiTarget |
+    Select-Object NodeAddress, IsConnected |
+    Format-Table -Auto
+
+Write-Host "`n=== 4) Sessions for expected IQN ===" -ForegroundColor Cyan
+$Sessions = Get-IscsiSession |
+    Where-Object { $_.TargetNodeAddress -eq $TargetIQN } |
+    Sort-Object InitiatorPortalAddress, TargetNodeAddress
+
+$Sessions |
+    Select-Object TargetNodeAddress,
+                  InitiatorInstanceName,
+                  InitiatorPortalAddress,
+                  IsConnected,
+                  IsPersistent,
+                  IsMultipathEnabled,
+                  NumberOfConnections,
+                  SessionIdentifier |
+    Format-Table -Auto
+
+Write-Host "`n=== 5) Active iSCSI connections ===" -ForegroundColor Cyan
+$Connections = Get-IscsiConnection | Sort-Object TargetNodeAddress, TargetPortNumber
+
+$Connections |
+    Select-Object ConnectionIdentifier,
+                  InitiatorNodeAddress,
+                  TargetNodeAddress,
+                  TargetPortNumber |
+    Format-Table -Auto
+
+Write-Host "`n=== 6) Session -> Disk mapping ===" -ForegroundColor Cyan
+Get-IscsiSession |
+    Where-Object { $_.TargetNodeAddress -eq $TargetIQN } |
+    Get-Disk |
+    Select-Object Number, FriendlyName, SerialNumber, OperationalStatus, PartitionStyle |
+    Format-Table -Auto
+
+Write-Host "`n=== 7) PASS / FAIL summary ===" -ForegroundColor Cyan
+
+$Fail = $false
+
+# Check initiator adapter
+$InitOk = Get-InitiatorPort | Where-Object {
+    $_.InstanceName -eq 'ROOT\ISCSIPRT\0000_0' -and $_.ConnectionType -eq 'iSCSI'
+}
+if ($InitOk) { Write-Host "PASS: Microsoft iSCSI Initiator adapter exists" -ForegroundColor Green }
+else { Write-Host "FAIL: Microsoft iSCSI Initiator adapter not found" -ForegroundColor Red; $Fail = $true }
+
+# Check portals
+if ($Portals.Count -eq 4 -and @($Portals.TargetPortalAddress | Sort-Object) -join ',' -eq @($ExpectedPortals | Sort-Object) -join ',') {
+    Write-Host "PASS: 4 correct discovery portals exist for initiator IP $InitiatorIP" -ForegroundColor Green
+} else {
+    Write-Host "FAIL: Discovery portals do not match expected 4 portals for initiator IP $InitiatorIP" -ForegroundColor Red
+    $Fail = $true
+}
+
+# Check sessions
+if ($Sessions.Count -eq 4) {
+    Write-Host "PASS: 4 sessions exist for target IQN $TargetIQN" -ForegroundColor Green
+} else {
+    Write-Host "FAIL: Expected 4 sessions for $TargetIQN, found $($Sessions.Count)" -ForegroundColor Red
+    $Fail = $true
+}
+
+# Check session flags
+$BadSessions = $Sessions | Where-Object {
+    $_.IsConnected -ne $true -or
+    $_.IsPersistent -ne $true -or
+    $_.IsMultipathEnabled -ne $true -or
+    $_.InitiatorInstanceName -ne 'ROOT\ISCSIPRT\0000_0' -or
+    $_.InitiatorPortalAddress -ne $InitiatorIP
+}
+if (-not $BadSessions) {
+    Write-Host "PASS: All sessions are connected, persistent, multipath-enabled, and bound to initiator IP $InitiatorIP" -ForegroundColor Green
+} else {
+    Write-Host "FAIL: One or more sessions have wrong flags / wrong initiator binding" -ForegroundColor Red
+    $Fail = $true
+}
+
+# Check port

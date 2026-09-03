@@ -1,0 +1,63 @@
+{
+    "servers": {
+        "FM1": "192.168.80.122",
+        "FM2": "192.168.80.123",
+        "PMC1": "192.168.80.124",
+        "PMC2": "192.168.80.125",
+        "PMC3": "192.168.80.126",
+        "SRVMGT": "192.168.80.127",
+        "NGINX": "192.168.80.128"
+    },
+    "plans": {
+        "FM": {
+            "targets": ["FM1", "FM2"],
+            "files": [
+                "BIOS_11N9M_WN64_1.7.5.EXE",
+                "CPLD_Firmware_P6J5H_WN64_1.0.4_A00_03.EXE",
+                "Diagnostics_Application_51PDX_WN64_4303A47_4303.47.EXE",
+                "iDRAC-with-Lifecycle-Controller_Firmware_63M5X_WN64_1.20.60.50_A00.EXE",
+                "Drivers-for-OS-Deployment_Application_HN408_WN64_25.07.05_A00.EXE",
+                "Firmware_R4NT8_WN64_1.77_A00_01.EXE",
+                "Network_Firmware_7PTPF_WN64_233.1.181.0.EXE",
+                "Network_Firmware_D81J3_WN64_26.46.3048_A00_03.EXE",
+                "SAS-RAID_Firmware_M3PGV_WN64_8.11.2.0.15-26_A02_01.EXE"
+            ]
+        },
+        "PMC": {
+            "targets": ["PMC1", "PMC2", "PMC3"],
+            "files": [
+                "BIOS_11N9M_WN64_1.7.5.EXE",
+                "BOSS_Firmware_N9FT6_WN64_2.2.13.2034_A03.EXE",
+                "Diagnostics_Application_51PDX_WN64_4303A47_4303.47.EXE",
+                "iDRAC-with-Lifecycle-Controller_Firmware_63M5X_WN64_1.20.60.50_A00.EXE",
+                "Drivers-for-OS-Deployment_Application_HN408_WN64_25.07.05_A00.EXE",
+                "Firmware_R4NT8_WN64_1.77_A00_01.EXE"
+            ]
+        },
+        "SRVMGT": {
+            "targets": ["SRVMGT"],
+            "files": [
+                "BIOS_GDC3C_WN64_2.5.2.EXE",
+                "CPLD_Firmware_T7PWH_WN64_1.4.0_A00.EXE",
+                "Diagnostics_Application_2V140_WN64_4303A46_4303.46.EXE",
+                "iDRAC-with-Lifecycle-Controller_Firmware_6CKFT_WN64_7.20.60.50_A00.EXE",
+                "Drivers-for-OS-Deployment_Application_WWKF0_WN64_25.07.04_A00.EXE",
+                "Firmware_6Y9X7_WN64_7.10_A00_10.EXE",
+                "Network_Firmware_5V215_WN64_23.31.1.EXE"
+            ]
+        },
+        "NGINX": {
+            "targets": ["NGINX"],
+            "files": [
+                "BIOS_GDC3C_WN64_2.5.2.EXE",
+                "CPLD_Firmware_T7PWH_WN64_1.4.0_A00.EXE",
+                "Diagnostics_Application_2V140_WN64_4303A46_4303.46.EXE",
+                "iDRAC-with-Lifecycle-Controller_Firmware_6CKFT_WN64_7.20.60.50_A00.EXE",
+                "Drivers-for-OS-Deployment_Application_WWKF0_WN64_25.07.04_A00.EXE",
+                "Firmware_6Y9X7_WN64_7.10_A00_10.EXE",
+                "Network_Firmware_5V215_WN64_23.31.1.EXE",
+                "Network_Firmware_HVN2R_WN64_23.31.18.10_01.EXE"
+            ]
+        }
+    }
+}

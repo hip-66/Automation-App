@@ -21,15 +21,11 @@ import subprocess
 IDRAC_USER = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip()
 IDRAC_PASS = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "")
 if not IDRAC_USER or not IDRAC_PASS:
-    if sys.stdin is not None and sys.stdin.isatty():
-        import getpass
-        if not IDRAC_USER:
-            IDRAC_USER = input("iDRAC username: ").strip()
-        if not IDRAC_PASS:
-            IDRAC_PASS = getpass.getpass("iDRAC password: ")
-    else:
-        print("ERROR: No iDRAC/SSH username available and there is no console to prompt on.", flush=True)
-        sys.exit(1)
+    import getpass
+    if not IDRAC_USER:
+        IDRAC_USER = input("iDRAC username: ").strip()
+    if not IDRAC_PASS:
+        IDRAC_PASS = getpass.getpass("iDRAC password: ")
 
 
 def resolve_racadm():

@@ -1,0 +1,47 @@
+service tag of Windows on cmd
+
+wmic bios get serialnumber
+ 
+or on PowerShell
+
+
+Get-CimInstance Win32_BIOS | Select-Object SerialNumber
+
+
+
+
+service tag of Linux
+
+sudo dmidecode -s system-serial-number
+
+or 
+
+sudo cat /sys/class/dmi/id/product_serial
+
+
+
+
+serial number 
+
+
+
+FortiSwitch-424	
+
+ssh admin@192.168.80.51
+admin / admin
+get system status
+
+
+Verify Version is FortiSwitch-424E v7.6.4,build1114,250821
+
+
+S5212F-ON 
+
+ssh admin@192.168.80.50 
+admin / admin
+
+sonic-cli
+show version
+
+look for:
+Software Version  : 4.5.1-Enterprise_Standard

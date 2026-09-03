@@ -155,11 +155,6 @@ def racadm(ip, *args, timeout=120):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return p.returncode, ((p.stdout or "") + (p.stderr or ""))
-    except subprocess.TimeoutExpired:
-        # Never str(e) a TimeoutExpired here - its default message embeds the
-        # full argv (including PASS in plaintext), which would otherwise leak
-        # straight into this run's log/console output.
-        return 1, f"racadm timed out after {timeout}s"
     except Exception as e:
         return 1, str(e)
 

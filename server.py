@@ -16,7 +16,7 @@ import json
 import secrets as secrets_module
 import concurrent.futures
 from datetime import timedelta, datetime
-from flask import Flask, jsonify, request, Response, send_from_directory, session, redirect
+from flask import Flask, jsonify, request, Response, send_from_directory, send_file, session, redirect
 
 import security
 
@@ -178,6 +178,7 @@ SCRIPTS_DIR = os.path.join(BASE_DIR, "Scripts")
 CHROMEDRIVERS_DIR = os.path.join(BASE_DIR, "Chromedrivers")
 RESULTS_DIR = os.path.join(BASE_DIR, "Outputs")             # generated .docx reports only
 REPORT_FOLDER_DIR = os.path.join(BASE_DIR, "Logs")          # logs + run history
+GUIDES_DIR = os.path.join(BASE_DIR, "Guides")               # platform documentation (docx/xlsx)
 # Per-run artifacts live in auto-created folders named
 # "<script>_<date>_<time>" - under Logs/ for the run log (+ validation
 # logs), and under Outputs/ for the generated .docx files.
@@ -1305,6 +1306,62 @@ def parse_major(version_text):
     m = re.search(r"(\d+)", str(version_text))
     return int(m.group(1)) if m else None
 
+# ---------------------------------------------------------------------------
+# Office detection - some machines this app runs on are VMs without Word/
+# Excel installed. The report/guide viewer (see /api/reports/preview) needs
+# to know this up front to offer the in-browser fallback instead of a
+# silently-failing os.startfile().
+# ---------------------------------------------------------------------------
+_office_cache = {"value": None, "ts": 0}
+
+def get_office_availability():
+    """Detect local Word/Excel install (registry ProgID first, common install
+    paths as a fallback) - same two-step approach as get_chrome_version()."""
+    if _office_cache["value"] is not None and time.time() - _office_cache["ts"] < 300:
+        return _office_cache["value"]
+
+    word = False
+    excel = False
+    try:
+        import winreg
+        # A registered COM ProgID is the most reliable signal Office is
+        # actually installed (survives version/edition differences) - it's
+        # only present when Word/Excel's own installer registers it.
+        for prog_id, flag_name in (("Word.Application", "word"), ("Excel.Application", "excel")):
+            try:
+                with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, f"{prog_id}\\CLSID"):
+                    if flag_name == "word":
+                        word = True
+                    else:
+                        excel = True
+            except OSError:
+                continue
+    except Exception as e:
+        server_logger.warning(f"Office registry detection failed: {e}")
+
+    if not word or not excel:
+        # Fallback: common install locations across Office versions (the
+        # "OfficeNN" folder name is shared by 2016/2019/2021/365 - only
+        # older Office 2013 uses Office15).
+        program_files = [os.environ.get("ProgramFiles", r"C:\Program Files"),
+                          os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")]
+        office_versions = ["Office16", "Office15"]
+        for pf in program_files:
+            for ver in office_versions:
+                if not word and os.path.exists(os.path.join(pf, "Microsoft Office", "root", ver, "WINWORD.EXE")):
+                    word = True
+                if not word and os.path.exists(os.path.join(pf, "Microsoft Office", ver, "WINWORD.EXE")):
+                    word = True
+                if not excel and os.path.exists(os.path.join(pf, "Microsoft Office", "root", ver, "EXCEL.EXE")):
+                    excel = True
+                if not excel and os.path.exists(os.path.join(pf, "Microsoft Office", ver, "EXCEL.EXE")):
+                    excel = True
+
+    result = {"word": word, "excel": excel}
+    _office_cache["value"] = result
+    _office_cache["ts"] = time.time()
+    return result
+
 def get_chromedriver_list():
     """Scan the Chromedrivers folder - adding a new version requires no code change."""
     drivers = []
@@ -1783,6 +1840,7 @@ def get_environment():
     import shutil as _shutil
     racadm_installed = _shutil.which("racadm") is not None or _shutil.which("racadm.exe") is not None
     plink_installed = _shutil.which("plink") is not None or _shutil.which("plink.exe") is not None
+    office = get_office_availability()
     try:
         _, _, free_bytes = _shutil.disk_usage(BASE_DIR)
         disk_free_gb = round(free_bytes / (1024 ** 3), 1)
@@ -1797,6 +1855,8 @@ def get_environment():
         "has_matching_driver": has_match,
         "racadm_installed": racadm_installed,
         "plink_installed": plink_installed,
+        "word_installed": office["word"],
+        "excel_installed": office["excel"],
         "disk_free_gb": disk_free_gb,
         "base_dir": BASE_DIR,
         "scripts_dir": SCRIPTS_DIR,
@@ -3283,6 +3343,102 @@ def reveal_report():
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ---------------------------------------------------------------------------
+# API: in-browser preview fallback for .docx/.xlsx (reports AND guides) - for
+# machines without Word/Excel installed (see get_office_availability()).
+# Streams the raw file bytes; mammoth.js/SheetJS on the frontend do the actual
+# docx/xlsx parsing entirely client-side, so no server-side conversion runs.
+# ---------------------------------------------------------------------------
+PREVIEWABLE_EXTS = {".docx", ".xlsx"}
+
+def _safe_preview_path(path):
+    """Same shape as _safe_output_open_path, but also allows GUIDES_DIR (read
+    -only viewing, never listed as an os.startfile() target) and is scoped to
+    just the two previewable extensions regardless of which root matched."""
+    if not path or not isinstance(path, str):
+        return None
+    roots = []
+    for r in (RESULTS_DIR, effective_results_dir(), REPORT_FOLDER_DIR, GUIDES_DIR):
+        try:
+            roots.append(os.path.normcase(os.path.realpath(r)))
+        except Exception:
+            pass
+    try:
+        resolved = os.path.realpath(path)
+    except Exception:
+        return None
+    resolved_nc = os.path.normcase(resolved)
+    if not any(resolved_nc == root or resolved_nc.startswith(root + os.sep) for root in roots):
+        return None
+    if not os.path.isfile(resolved):
+        return None
+    if os.path.splitext(resolved)[1].lower() not in PREVIEWABLE_EXTS:
+        return None
+    return resolved
+
+@app.route('/api/reports/preview', methods=['GET'])
+def preview_report():
+    path = request.args.get("path")
+    safe_path = _safe_preview_path(path)
+    if not safe_path:
+        server_logger.warning(f"Blocked unsafe /api/reports/preview request: {path}")
+        return jsonify({"ok": False, "error": "Blocked unsafe file path or file type"}), 400
+    return send_file(safe_path, as_attachment=False, download_name=os.path.basename(safe_path))
+
+# ---------------------------------------------------------------------------
+# API: Guides catalog - Word/Excel platform documentation under Guides/, kept
+# entirely separate from the Scripts/ automation catalog (no run/wizard
+# semantics, just browse + preview via the endpoint above).
+# ---------------------------------------------------------------------------
+_REV_RE = re.compile(r"[_\s]*Rev[_\s]*([A-Za-z0-9]+)", re.IGNORECASE)
+
+def _guide_title_and_revision(filename):
+    """Split 'Nova_Hub_ATP_Rev_A01.docx' into ('Nova Hub ATP', 'A01') so
+    same-topic revisions can be grouped and sorted; files with no Rev_XX
+    marker (e.g. the .xlsx) get revision None."""
+    stem = os.path.splitext(filename)[0]
+    m = _REV_RE.search(stem)
+    revision = m.group(1).upper() if m else None
+    title = (stem[:m.start()] if m else stem).replace("_", " ").strip()
+    return title, revision
+
+def scan_guides():
+    """Walk Guides/<Platform>/... for .docx/.xlsx files. Platform is the
+    first path segment under Guides/; everything below that is folded into
+    one flat list per platform, grouped by guide title (see above) so the
+    frontend can offer a revision picker instead of listing every file."""
+    guides_by_platform = {}
+    if not os.path.isdir(GUIDES_DIR):
+        return guides_by_platform
+    for root, _dirs, files in os.walk(GUIDES_DIR):
+        rel_root = os.path.relpath(root, GUIDES_DIR)
+        if rel_root == ".":
+            continue  # platform folders only start one level down
+        platform = rel_root.split(os.sep)[0]
+        for fname in files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in PREVIEWABLE_EXTS:
+                continue
+            full_path = os.path.join(root, fname)
+            title, revision = _guide_title_and_revision(fname)
+            try:
+                size_bytes = os.path.getsize(full_path)
+            except OSError:
+                size_bytes = 0
+            guides_by_platform.setdefault(platform, []).append({
+                "title": title,
+                "revision": revision,
+                "filename": fname,
+                "type": "word" if ext == ".docx" else "excel",
+                "path": full_path,
+                "size_bytes": size_bytes,
+            })
+    return guides_by_platform
+
+@app.route('/api/guides', methods=['GET'])
+def api_guides():
+    return jsonify(scan_guides())
 
 def _resolve_run_output_selection(path):
     """Given an output file/folder path from a finished run, return the path to

@@ -37,17 +37,11 @@ from PIL import ImageGrab
 USERNAME = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip()
 PASSWORD = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "")
 if not USERNAME or not PASSWORD:
-    if sys.stdin is not None and sys.stdin.isatty():
-        import getpass
-        if not USERNAME:
-            USERNAME = input("ESXi username: ").strip()
-        if not PASSWORD:
-            PASSWORD = getpass.getpass("ESXi password: ")
-    else:
-        print("ERROR: No ESXi username/password available (defaults not configured) and this run "
-              "is non-interactive, so a prompt cannot be shown. Configure the app's default "
-              "ESXi credentials and retry.", flush=True)
-        sys.exit(1)
+    import getpass
+    if not USERNAME:
+        USERNAME = input("ESXi username: ").strip()
+    if not PASSWORD:
+        PASSWORD = getpass.getpass("ESXi password: ")
 
 def _resolve_chromedriver():
     """Prefer the exact driver handed over by the PS Automation app (env var).
