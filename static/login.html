@@ -40,14 +40,16 @@
     @media(max-width:1120px){.diagram{display:none}}
     #wf{width:100%;max-width:520px;height:92%;overflow:visible}
     .wf-edge,.wf-track{fill:none;stroke:var(--edge);stroke-width:1.5}
-    /* --wf-len is set from the path's REAL getTotalLength() in JS below,
-       not the SVG pathLength attribute - that combo (pathLength + a CSS
-       keyframe animating stroke-dashoffset) is unreliable across browsers,
-       which is why this animation sometimes silently didn't run at all.
-       The 1000 fallback only matters if getTotalLength() ever throws. */
-    .wf-glow{fill:none;stroke:var(--flow);stroke-width:6;stroke-linecap:round;stroke-dasharray:44 var(--wf-len, 1000);opacity:.4;filter:blur(3px);animation:run 7s linear infinite}
-    .wf-lead{fill:none;stroke:var(--lead);stroke-width:2.2;stroke-linecap:round;stroke-dasharray:30 var(--wf-len, 1000);animation:run 7s linear infinite}
-    @keyframes run{from{stroke-dashoffset:calc(var(--wf-len, 1000) + 30)}to{stroke-dashoffset:30}}
+    /* Every spine path carries pathLength="1000" (set in JS), which normalizes
+       its geometry to 1000 units - so all the dash/offset numbers below are
+       plain constants and the keyframe interpolates reliably.
+       Do NOT reintroduce calc(var(--wf-len) + 30) here: Chrome cannot
+       interpolate a var()-substituted calc() against a plain number, so
+       stroke-dashoffset pinned at the "from" value (computed style stayed the
+       literal string "calc(1084px)") and the light rendered once, then froze. */
+    .wf-glow{fill:none;stroke:var(--flow);stroke-width:6;stroke-linecap:round;stroke-dasharray:44 1000;opacity:.4;filter:blur(3px);animation:run 7s linear infinite}
+    .wf-lead{fill:none;stroke:var(--lead);stroke-width:2.2;stroke-linecap:round;stroke-dasharray:30 1000;animation:run 7s linear infinite}
+    @keyframes run{from{stroke-dashoffset:1030}to{stroke-dashoffset:30}}
     .wf-node rect{fill:var(--node-fill);stroke:var(--node-stroke);stroke-width:1.3}
     .wf-node .ic{fill:none;stroke:var(--cyan);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
     [data-theme="light"] .wf-node .ic{stroke:var(--flow)}
@@ -291,10 +293,9 @@
             default:return "";}}
         BRANCH.forEach(e=>{const p=document.createElementNS(NS,"path");p.setAttribute("d",elbow(N[e[0]],N[e[1]],false));p.setAttribute("class","wf-edge");svg.appendChild(p);});
         const d=spinePath();
-        ["wf-track","wf-glow","wf-lead"].forEach(cls=>{
-            const p=document.createElementNS(NS,"path");p.setAttribute("d",d);p.setAttribute("class",cls);svg.appendChild(p);
-            if(cls!=="wf-track"){ try{ p.style.setProperty("--wf-len", p.getTotalLength()); }catch(e){} }
-        });
+        // pathLength="1000" normalizes every spine path to 1000 units, so the
+        // dash/offset constants in the CSS above line up with the real geometry.
+        ["wf-track","wf-glow","wf-lead"].forEach(cls=>{const p=document.createElementNS(NS,"path");p.setAttribute("d",d);p.setAttribute("class",cls);p.setAttribute("pathLength","1000");svg.appendChild(p);});
         Object.values(N).forEach(n=>{
             const g=document.createElementNS(NS,"g");g.setAttribute("class","wf-node");
             const x=n.x-NW/2,y=n.y-NH/2;
