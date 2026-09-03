@@ -81,7 +81,7 @@ from tkinter import ttk, messagebox
 # .env default) is used; a standalone run with neither set prompts instead.
 ESXI_USER = os.environ.get("PSAUTO_USERNAME", "").strip() or os.environ.get("PSAUTO_DEFAULT_USERNAME", "").strip()
 ESXI_PASS = os.environ.get("PSAUTO_PASSWORD", "") or os.environ.get("PSAUTO_DEFAULT_PASSWORD", "")
-if not ESXI_USER or not ESXI_PASS:
+if not SELFTEST and (not ESXI_USER or not ESXI_PASS):
     if sys.stdin is not None and sys.stdin.isatty():
         import getpass
         if not ESXI_USER:
@@ -653,6 +653,7 @@ class EsxiConfigGUI:
         if not self._live():
             self.log("[SELF-TEST] (no host connected) - change not sent.")
             return
+        self.log("Updating / configuring the server - please wait...")
         try:
             fn(*args)
             self.log("OK: change applied. Refreshing...")
@@ -688,6 +689,7 @@ class EsxiConfigGUI:
 
     def refresh_current(self):
         if self._live():
+            self.log("Reading current configuration from the server - please wait...")
             try:
                 self.current["cfg"] = pull_config(self._content(), self._host())
             except Exception as e:
@@ -981,7 +983,9 @@ class EsxiConfigGUI:
         self.pg_vsw.configure(values=[v["name"] for v in cfg.get("vswitches", [])])
         self.vmk_pg.configure(values=[p["name"] for p in cfg.get("portgroups", [])])
 
-        self.log(f"Loaded config for {self.host_var.get() or cfg.get('name', '(unknown)')}")
+        host_label = self.host_var.get() or cfg.get('name', '(unknown)')
+        self.log(f"DONE: data loaded successfully for {host_label}. "
+                 f"You can now view, edit, add, or delete values on any tab.")
 
 
 # ===========================================================================

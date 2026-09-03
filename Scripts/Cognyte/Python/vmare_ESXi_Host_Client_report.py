@@ -365,18 +365,22 @@ def process_esxi_server(ip, doc):
             add_to_word(doc, f"Virtual Machines - {ip}", img)
             os.remove(img)
             
-        # Click on the first Virtual Machine details to photograph the VM details screen
+        # Click into EVERY Virtual Machine in turn to photograph each one's
+        # details screen (same discover-all/loop/navigate-back pattern already
+        # used below for Port Groups and Virtual Switches).
         try:
             vm_links = driver.find_elements(By.XPATH, "//table[contains(@class,'vui-grid')]//tbody//tr//td[2]//a | //table//tbody//tr//td[1]//a | //a[contains(@href, '#/host/vms/')]")
             vm_names = [elem.text.strip() for elem in vm_links if elem.text.strip()]
-            if vm_names:
-                first_vm = vm_names[0]
-                logger.info(f"Discovered Virtual Machines. Navigating into first VM: {first_vm}")
-                
+
+            logger.info(f"Discovered Virtual Machines dynamically: {vm_names}")
+
+            for vm_name in vm_names:
+                logger.info(f"Navigating into Virtual Machine: {vm_name}")
+
                 click_script = f"""
                     var links = document.querySelectorAll('table tbody tr td a, a[href*="#/host/vms/"]');
                     for (var i = 0; i < links.length; i++) {{
-                        if (links[i].textContent.trim() === '{first_vm}') {{
+                        if (links[i].textContent.trim() === '{vm_name}') {{
                             links[i].click();
                             return true;
                         }}
@@ -385,13 +389,13 @@ def process_esxi_server(ip, doc):
                 """
                 driver.execute_script(click_script)
                 time.sleep(5)
-                
-                img_vm = f"vm_{first_vm}.png"
+
+                img_vm = f"vm_{vm_name}.png"
                 if take_primary_monitor_screenshot(img_vm):
-                    add_to_word(doc, f"Virtual Machine Details ({first_vm}) - {ip}", img_vm)
+                    add_to_word(doc, f"Virtual Machine Details ({vm_name}) - {ip}", img_vm)
                     os.remove(img_vm)
-                    
-                # Navigate back to main list to continue cleanly
+
+                # Navigate back to the VM list to continue cleanly to the next one
                 esxi_force_click(driver, "Virtual Machines")
                 time.sleep(3)
         except Exception as e:
