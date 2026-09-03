@@ -1,0 +1,88 @@
+﻿Start: 2026-09-03 14:47:51
+Script Revision: 1.0
+
+Expected: FortiGate-401F
+Actual:   FortiGate-401F
+ATP:      PASS
+
+Expected: v7.2.8,build1639,240313
+Actual:   v7.2.8,build1639,240313
+ATP:      PASS
+
+Expected: Link Flex | LACP | Config ver 10.5.9+DLP
+Actual:   n/a
+ATP:      N/A
+
+Expected: Link Flex | 10G | Config ver 10.5.9+DLP
+Actual:   Link Flex | 10G | Config ver 10.5.9+DLP
+ATP:      PASS
+
+----- DLP POLICIES -----
+Policy:   Outbound-Allow CAD files
+Expected: Disable
+Actual:   Disable
+ATP:      PASS
+
+Policy:   Outbound-Block FTP-GDS&OAS files
+Expected: Disable
+Actual:   Disable
+ATP:      PASS
+
+Policy:   Outbound-Block SMB
+Expected: Disable
+Actual:   Disable
+ATP:      PASS
+
+Policy:   Inbound-Allow CAD files
+Expected: Disable
+Actual:   Disable
+ATP:      PASS
+
+Policy:   Inbound-Block FTP-GDS&OAS files
+Expected: Disable
+Actual:   Disable
+ATP:      PASS
+
+Policy:   Inbound-Block SMB
+Expected: Disable
+Actual:   Disable
+ATP:      PASS
+
+----- INVENTORY -----
+Serial Number: FG4H1FT925903754
+MAC Addresses:
+  port1: d4:b4:c0:e4:7b:60
+  x1: d4:b4:c0:e4:7b:78
+  port2: d4:b4:c0:e4:7b:61
+  x2: d4:b4:c0:e4:7b:79
+  port3: d4:b4:c0:e4:7b:62
+  x3: d4:b4:c0:e4:7b:7a
+  port4: d4:b4:c0:e4:7b:63
+  x4: d4:b4:c0:e4:7b:7b
+  port5: d4:b4:c0:e4:7b:64
+  x5: d4:b4:c0:e4:7b:7c
+  port6: d4:b4:c0:e4:7b:65
+  x6: d4:b4:c0:e4:7b:7d
+  port7: d4:b4:c0:e4:7b:66
+  x7: d4:b4:c0:e4:7b:7e
+  port8: d4:b4:c0:e4:7b:67
+  x8: d4:b4:c0:e4:7b:7f
+  port9: d4:b4:c0:e4:7b:68
+  port10: d4:b4:c0:e4:7b:69
+  port11: d4:b4:c0:e4:7b:6a
+  port12: d4:b4:c0:e4:7b:6b
+  port13: d4:b4:c0:e4:7b:6c
+  port14: d4:b4:c0:e4:7b:6d
+  port15: d4:b4:c0:e4:7b:6e
+  port16: d4:b4:c0:e4:7b:6f
+  port17: d4:b4:c0:e4:7b:70
+  port18: d4:b4:c0:e4:7b:71
+  port19: d4:b4:c0:e4:7b:72
+  port20: d4:b4:c0:e4:7b:73
+  port21: d4:b4:c0:e4:7b:74
+  port22: d4:b4:c0:e4:7b:75
+  port23: d4:b4:c0:e4:7b:76
+  port24: d4:b4:c0:e4:7b:77
+  ha: d4:b4:c0:e4:7b:5e
+  LinkFlex_MGMT: d4:b4:c0:e4:7b:64
+  mgmt: d4:b4:c0:e4:7b:5f
